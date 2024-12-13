@@ -31,7 +31,11 @@
 #include <QScreen>
 #endif
 
+#ifdef __HAIKU__
+#define TIP_HEIGHT 0
+#else
 #define TIP_HEIGHT 5
+#endif
 
 TimeTooltip::TimeTooltip( QWidget *parent ) :
     QWidget( parent )
@@ -47,7 +51,12 @@ TimeTooltip::TimeTooltip( QWidget *parent ) :
     setAttribute( Qt::WA_TransparentForMouseEvents );
 
     // Inherit from the system default font size -5
+#ifdef __HAIKU__
+    mFont = qApp->font();
+    mFont.setPointSize(mFont.pointSize() - 4);
+#else
     mFont = QFont( "Verdana", qMax( qApp->font().pointSize() - 5, 7 ) );
+#endif
     mTipX = -1;
 
     // By default the widget is unintialized and should not be displayed

@@ -103,7 +103,8 @@ typedef struct
 
 #if !defined (HAVE_GETDELIM) || \
     !defined (HAVE_GETPID)   || \
-    !defined (HAVE_SWAB)
+    !defined (HAVE_SWAB) || \
+    defined(__HAIKU__)
 # include <sys/types.h> /* ssize_t, pid_t */
 #endif
 
@@ -381,6 +382,7 @@ void swab (const void *, void *, ssize_t);
 #endif
 
 /* Socket stuff */
+#ifndef __HAIKU__
 #ifndef HAVE_INET_PTON
 # ifndef _WIN32
 #  include <sys/socket.h>
@@ -389,6 +391,7 @@ typedef int socklen_t;
 # endif
 int inet_pton(int, const char *, void *);
 const char *inet_ntop(int, const void *, char *, socklen_t);
+#endif
 #endif
 
 /* NaCl has a broken netinet/tcp.h, so TCP_NODELAY is not set */
@@ -423,6 +426,8 @@ struct pollfd;
 int poll (struct pollfd *, unsigned, int);
 #endif
 
+// or these
+#ifndef __HAIKU__
 #ifndef HAVE_IF_NAMEINDEX
 #include <errno.h>
 # ifndef HAVE_STRUCT_IF_NAMEINDEX
@@ -437,6 +442,7 @@ struct if_nameindex
 # endif
 # define if_nameindex()         (errno = ENOBUFS, NULL)
 # define if_freenameindex(list) (void)0
+#endif
 #endif
 
 #ifndef HAVE_STRUCT_TIMESPEC

@@ -81,7 +81,7 @@ enum {
  * Initial/Current configuration for a vout_display_t
  */
 typedef struct {
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     bool is_fullscreen VLC_DEPRECATED;  /* Is the display fullscreen */
 #endif
 
@@ -148,7 +148,7 @@ enum {
      */
     VOUT_DISPLAY_RESET_PICTURES,
 
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     /* Ask the module to acknowledge/refuse the fullscreen state change after
      * being requested (externally or by VOUT_DISPLAY_EVENT_FULLSCREEN */
     VOUT_DISPLAY_CHANGE_FULLSCREEN VLC_DEPRECATED_ENUM,     /* bool fs */
@@ -196,7 +196,7 @@ enum {
     /* */
     VOUT_DISPLAY_EVENT_PICTURES_INVALID,    /* The buffer are now invalid and need to be changed */
 
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     VOUT_DISPLAY_EVENT_FULLSCREEN,
     VOUT_DISPLAY_EVENT_WINDOW_STATE,
 #endif
@@ -369,7 +369,7 @@ static inline void vout_display_SendEventKey(vout_display_t *vd, int key)
 {
     vout_display_SendEvent(vd, VOUT_DISPLAY_EVENT_KEY, key);
 }
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
 static inline void vout_display_SendEventFullscreen(vout_display_t *vd, bool is_fullscreen,
                                                     bool is_window_fullscreen)
 {

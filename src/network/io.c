@@ -192,7 +192,9 @@ int *net_Listen (vlc_object_t *p_this, const char *psz_host,
         switch (ptr->ai_socktype)
         {
             case SOCK_STREAM:
+#ifdef SOCK_RDM
             case SOCK_RDM:
+#endif
             case SOCK_SEQPACKET:
 #ifdef SOCK_DCCP
             case SOCK_DCCP:

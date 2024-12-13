@@ -41,6 +41,7 @@
 #include <QWidget>
 #include <QFrame>
 #include <QLabel>
+#include <QPainter>
 #include <QMouseEvent>
 #include <QPropertyAnimation>
 #include <QAbstractNativeEventFilter>
@@ -86,7 +87,7 @@ private:
     intf_thread_t *p_intf;
     vout_window_t *p_window;
 
-    QWidget *stable;
+    QLabel *stable;
     QLayout *layout;
 
     bool enable_mouse_events;

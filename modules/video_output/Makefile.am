@@ -379,6 +379,14 @@ if HAVE_WIN32
 vout_LTLIBRARIES += libdrawable_plugin.la
 endif
 
+### HAIKU ###
+libhaiku_vout_plugin_la_SOURCES = video_output/haiku.cpp
+libhaiku_vout_plugin_la_LIBADD = $(QT_LIBS) $(LIBS_qt) -lbe
+libhaiku_vout_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) $(QT_CFLAGS) $(CXXFLAGS_qt)
+if HAVE_HAIKU
+vout_LTLIBRARIES += libhaiku_vout_plugin.la
+endif
+
 ### OS/2 ###
 if HAVE_OS2
 vout_LTLIBRARIES += libdrawable_plugin.la
@@ -445,7 +453,9 @@ libcaca_plugin_la_CFLAGS = $(AM_CFLAGS) $(CACA_CFLAGS)
 libcaca_plugin_la_LIBADD = libevent_thread.la $(CACA_LIBS)
 if !HAVE_WIN32
 if !HAVE_DARWIN
+if !HAVE_HAIKU
 libcaca_plugin_la_LIBADD += $(X_LIBS) $(X_PRE_LIBS) -lX11
+endif
 endif
 endif
 libcaca_plugin_la_LDFLAGS = $(AM_LDFLAGS) -rpath '$(voutdir)'

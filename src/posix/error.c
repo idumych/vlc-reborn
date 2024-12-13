@@ -48,7 +48,7 @@ static const char *vlc_strerror_l(int errnum, const char *lname)
         errno = saved_errno;
     }
 
-    const char *buf = strerror_l(errnum, loc);
+    const char *buf = strerror(errnum);
 
     freelocale(loc);
     return buf;

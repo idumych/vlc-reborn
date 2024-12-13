@@ -46,7 +46,6 @@ dnl
 AC_PROG_CC
 AC_USE_SYSTEM_EXTENSIONS
 VLC_PROG_CC_C11
-AC_DEFINE([_FORTIFY_SOURCE], 2, [Define to 2 to get glibc warnings.])
 AC_DEFINE([_FILE_OFFSET_BITS], 64, [Define to 64 for large files support.])
 AH_TOP([
 #ifndef _REENTRANT
@@ -358,6 +357,13 @@ case "${host_os}" in
     AC_LIBOBJ([recvmsg])
     AC_LIBOBJ([sendmsg])
     ;;
+  *haiku*)
+    SYS=haiku
+    VLC_ADD_LIBS([libvlccore libvlc vlc],[-lnetwork -lbe -lgnu])
+#    VLC_ADD_PLUGIN([haiku_aout])
+#    VLC_ADD_LIBS([haiku_aout],[-lmedia])
+#    VLC_ADD_CXXFLAGS([qt4],[-std=c++11])
+    ;;
   *)
     SYS="${host_os}"
     ;;
@@ -399,6 +405,7 @@ AS_IF([test "${SYS}" = "mingw32"],[
 
 AM_CONDITIONAL(HAVE_LINUX,   test "${SYS}" = "linux")
 AM_CONDITIONAL(HAVE_OS2,     test "${SYS}" = "os2")
+AM_CONDITIONAL(HAVE_HAIKU,     test "${SYS}" = "haiku")
 
 AM_CONDITIONAL(HAVE_DARWIN,  test "${SYS}" = "darwin")
 AM_CONDITIONAL(HAVE_IOS,     test "${HAVE_IOS}" = "1")
@@ -668,7 +675,7 @@ need_libc=false
 
 dnl Check for usual libc functions
 AC_CHECK_FUNCS([accept4 daemon fcntl flock fstatvfs fork getenv getmntent_r getpwuid_r isatty lstat memalign mkostemp mmap newlocale open_memstream openat pipe2 pread posix_fadvise posix_madvise posix_memalign setlocale stricmp strnicmp strptime uselocale])
-AC_REPLACE_FUNCS([aligned_alloc atof atoll dirfd fdopendir flockfile fsync getdelim getpid lfind lldiv memrchr nrand48 poll recvmsg rewind sendmsg setenv strcasecmp strcasestr strdup strlcpy strndup strnlen strnstr strsep strtof strtok_r strtoll swab tdestroy tfind timegm timespec_get strverscmp pathconf])
+AC_REPLACE_FUNCS([aligned_alloc atof atoll dirfd fdopendir ffsll flockfile fsync getdelim getpid lfind lldiv memrchr nrand48 poll recvmsg rewind sendmsg setenv strcasecmp strcasestr strdup strlcpy strndup strnlen strnstr strsep strtof strtok_r strtoll swab tfind timegm timespec_get strverscmp pathconf])
 AC_REPLACE_FUNCS([gettimeofday])
 AC_CHECK_FUNC(fdatasync,,
   [AC_DEFINE(fdatasync, fsync, [Alias fdatasync() to fsync() if missing.])
@@ -1019,6 +1026,9 @@ AC_SEARCH_LIBS(connect, [socket], [
   AS_IF([test "${SYS}" = "mingw32"], [
     SOCKET_LIBS="-lws2_32 -liphlpapi"
   ])
+  AS_IF([test "${SYS}" = "haiku"], [
+    SOCKET_LIBS="-lnetwork"
+  ])
 ])
 
 AC_SEARCH_LIBS([inet_pton], [nsl], [
@@ -1233,9 +1243,12 @@ AH_BOTTOM([
     AS_IF([test "${ac_cv_c_omit_frame_pointer}" = "no"], [VLC_RESTORE_FLAGS])
   ])
 
-  AX_APPEND_COMPILE_FLAGS([-fstack-protector-strong])
-  AX_APPEND_COMPILE_FLAGS([-fstack-protector-strong], [CXXFLAGS])
-  dnl Win32 requires linking to ssp for stack-protection
+  AS_IF([test "${SYS}" != "haiku"], [
+       AX_APPEND_COMPILE_FLAGS([-fstack-protector-strong])
+       AX_APPEND_COMPILE_FLAGS([-fstack-protector-strong], [CXXFLAGS])
+       dnl Win32 requires linking to ssp for stack-protection
+  ])
+
   AS_IF([test "${SYS}" = "mingw32"], [
       LDFLAGS="${LDFLAGS} -lssp"
       AS_IF([test "${vlc_winstore_app}" != 1], [LDFLAGS="${LDFLAGS} -ladvapi32"])
@@ -1794,7 +1807,7 @@ then
   fi
   AC_ARG_VAR([LUAC], [LUA byte compiler])
   AS_IF([test -z "$LUAC"], [
-     AC_CHECK_TOOL(LUAC, [luac], [false])
+     AC_CHECK_TOOL(LUAC, [luac5.2], [false])
   ])
   AS_IF([test "${LUAC}" = "false"], [
     AC_MSG_ERROR([Could not find the LUA byte compiler.])
@@ -2725,7 +2738,7 @@ then
       VLC_SAVE_FLAGS
       CPPFLAGS="${CPPFLAGS} ${POSTPROC_CFLAGS}"
       CFLAGS="${CFLAGS} ${POSTPROC_CFLAGS}"
-      AC_CHECK_HEADERS(postproc/postprocess.h)
+      AC_CHECK_HEADERS(libpostproc/postprocess.h)
       VLC_ADD_PLUGIN([postproc])
       VLC_RESTORE_FLAGS
     ],[
@@ -3184,7 +3197,7 @@ dnl  X C Bindings modules
 dnl
 AC_ARG_ENABLE(xcb,
   [  --enable-xcb            X11 support with XCB (default enabled)],, [
-  AS_IF([test "${SYS}" != "mingw32" -a "${SYS}" != "darwin"], [
+  AS_IF([test "${SYS}" != "mingw32" -a "${SYS}" != "darwin" -a "${SYS}" != "haiku"], [
     enable_xcb="yes"
   ], [
     enable_xcb="no"

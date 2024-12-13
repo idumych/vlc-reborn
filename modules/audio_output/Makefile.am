@@ -97,6 +97,12 @@ if HAVE_SNDIO
 aout_LTLIBRARIES += libsndio_plugin.la
 endif
 
+libhaiku_aout_plugin_la_SOURCES = audio_output/haiku.cpp
+libhaiku_aout_plugin_la_LIBADD = -lmedia
+if HAVE_HAIKU
+aout_LTLIBRARIES += libhaiku_aout_plugin.la
+endif
+
 libwaveout_plugin_la_SOURCES = audio_output/waveout.c \
 	audio_output/windows_audio_common.h
 libwaveout_plugin_la_LIBADD = -lwinmm

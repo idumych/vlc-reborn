@@ -411,6 +411,16 @@ libvlccore_la_SOURCES += \
 	linux/dirs.c \
 	linux/thread.c
 else
+if HAVE_HAIKU
+libvlccore_la_SOURCES += \
+	haiku/dirs.cpp \
+	haiku/specific.c \
+	posix/error.c \
+	posix/netconf.c \
+	posix/getaddrinfo.c \
+	posix/thread.c
+libvlccore_la_LIBADD += -lgnu -lnetwork
+else
 if HAVE_DARWIN
 libvlccore_la_SOURCES += \
 	darwin/dirs.c \
@@ -439,6 +449,7 @@ libvlccore_la_LIBADD += -lanl
 else
 libvlccore_la_SOURCES += \
 	posix/getaddrinfo.c
+endif
 endif
 endif
 endif

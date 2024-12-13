@@ -1264,6 +1264,7 @@ void MainInterface::setStatusBarVisibility( bool b_visible )
 #ifndef QT_NO_STATUSBAR
     statusBar()->setVisible( b_visible );
     b_statusbarVisible = b_visible;
+
     if( controls ) controls->setGripVisible( !b_statusbarVisible );
 #endif
 }
@@ -1336,9 +1337,9 @@ void MainInterface::createSystray()
 {
     QIcon iconVLC;
     if( QDate::currentDate().dayOfYear() >= QT_XMAS_JOKE_DAY && var_InheritBool( p_intf, "qt-icon-change" ) )
-        iconVLC = QIcon::fromTheme( "vlc-xmas", QIcon( ":/logo/vlc128-xmas.png" ) );
+        iconVLC = QIcon( ":/logo/vlc128-xmas.png" );
     else
-        iconVLC = QIcon::fromTheme( "vlc", QIcon( ":/logo/vlc256.png" ) );
+        iconVLC = QIcon( ":/logo/vlc256.png" );
     sysTray = new QSystemTrayIcon( iconVLC, this );
     sysTray->setToolTip( qtr( "VLC media player" ));
 
@@ -1704,11 +1705,18 @@ void MainInterface::wheelEvent( QWheelEvent *e )
 void MainInterface::closeEvent( QCloseEvent *e )
 {
 //  hide();
+#ifdef __HAIKU__
+    THEMIM->stop();
+    emit askToQuit();
+    usleep(1000);
+#endif
     if ( b_minimalView )
         setMinimalView( false );
+#ifndef __HAIKU__
     if( videoWidget )
         releaseVideoSlot( true );
     emit askToQuit(); /* ask THEDP to quit, so we have a unique method */
+#endif
     /* Accept session quit. Otherwise we break the desktop mamager. */
     e->accept();
 }

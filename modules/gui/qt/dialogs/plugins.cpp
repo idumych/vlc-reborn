@@ -51,6 +51,7 @@
 #include <QSpacerItem>
 #include <QListView>
 #include <QPainter>
+#include <QPainterPath>
 #include <QStyleOptionViewItem>
 #include <QKeyEvent>
 #include <QPushButton>

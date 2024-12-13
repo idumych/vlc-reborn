@@ -570,7 +570,7 @@ void vout_ControlChangeViewpoint(vout_thread_t *vout,
 static void VoutGetDisplayCfg(vout_thread_t *vout, vout_display_cfg_t *cfg, const char *title)
 {
     /* Load configuration */
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     cfg->is_fullscreen = var_GetBool(vout, "fullscreen")
                          || var_GetBool(vout, "video-wallpaper");
 #endif
@@ -1363,7 +1363,7 @@ static void ThreadChangeFullscreen(vout_thread_t *vout, bool fullscreen)
 {
     vout_window_t *window = vout->p->window;
 
-#if !defined(_WIN32) && !defined(__OS2__)
+#if !defined(_WIN32) && !defined(__OS2__) && !defined(__HAIKU__)
     if (window != NULL)
         vout_window_SetFullScreen(window, fullscreen);
 #else
@@ -1383,7 +1383,7 @@ static void ThreadChangeWindowState(vout_thread_t *vout, unsigned state)
 
     if (window != NULL)
         vout_window_SetState(window, state);
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     else /* FIXME: remove this event */
     if (vout->p->display.vd != NULL)
         vout_display_SendWindowState(vout->p->display.vd, state);
@@ -1516,7 +1516,7 @@ static int ThreadStart(vout_thread_t *vout, vout_display_state_t *state)
     if (!state) {
         VoutGetDisplayCfg(vout, &state_default.cfg, vout->p->display.title);
 
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
         bool below = var_InheritBool(vout, "video-wallpaper");
         bool above = var_InheritBool(vout, "video-on-top");
 
@@ -1645,7 +1645,7 @@ static int ThreadReinit(vout_thread_t *vout,
 
     vout_ReinitInterlacingSupport(vout);
 
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     if (!state.cfg.is_fullscreen)
 #endif
     {

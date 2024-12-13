@@ -238,7 +238,11 @@ void AbstractController::createAndAddWidget( QBoxLayout *controlLayout_,
 
 QWidget *AbstractController::createWidget( buttonType_e button, int options )
 {
+#ifdef __HAIKU__
+    bool b_flat  = true; // Flat for Haiku
+#else
     bool b_flat  = options & WIDGET_FLAT;
+#endif
     bool b_big   = options & WIDGET_BIG;
     bool b_shiny = options & WIDGET_SHINY;
     bool b_special = false;
@@ -740,7 +744,11 @@ ControlsWidget::ControlsWidget( intf_thread_t *_p_i,
                                         .toString();
     parseAndCreate( line2, controlLayout2 );
 
+#ifdef __HAIKU__
+    grip = new QWidget( this );
+#else
     grip = new QSizeGrip( this );
+#endif
     controlLayout2->addWidget( grip, 0, Qt::AlignBottom|Qt::AlignRight );
 
     if( !b_advancedVisible && advControls ) advControls->hide();

@@ -127,20 +127,25 @@ bool VideoWidget::request( struct vout_window_t *p_wnd )
     /* The owner of the video window needs a stable handle (WinId). Reparenting
      * in Qt4-X11 changes the WinId of the widget, so we need to create another
      * dummy widget that stays within the reparentable widget. */
-    stable = new QWidget();
+    stable = new QLabel();
     stable->setContextMenuPolicy( Qt::PreventContextMenu );
     QPalette plt = palette();
     plt.setColor( QPalette::Window, Qt::black );
     stable->setPalette( plt );
     stable->setAutoFillBackground(true);
+#if defined(Q_OS_HAIKU)
+       stable->setMinimumSize( 32, 32 );
+    stable->setAttribute( Qt::WA_TransparentForMouseEvents, true );
+#else
     /* Force the widget to be native so that it gets a winId() */
     stable->setAttribute( Qt::WA_NativeWindow, true );
+#endif
     /* Indicates that the widget wants to draw directly onto the screen.
        Widgets with this attribute set do not participate in composition
        management */
     /* This is currently disabled on X11 as it does not seem to improve
      * performance, but causes the video widget to be transparent... */
-#if !defined (QT5_HAS_X11)
+#if !defined (QT5_HAS_X11) && !defined(Q_OS_HAIKU)
     stable->setAttribute( Qt::WA_PaintOnScreen, true );
 #else
     stable->setMouseTracking( true );
@@ -160,6 +165,9 @@ bool VideoWidget::request( struct vout_window_t *p_wnd )
             break;
         case VOUT_WINDOW_TYPE_HWND:
             p_wnd->handle.hwnd = (void *)stable->winId();
+            break;
+        case VOUT_WINDOW_TYPE_QT:
+            p_wnd->handle.qtwindow = (void *)stable;
             break;
         case VOUT_WINDOW_TYPE_NSOBJECT:
             p_wnd->handle.nsobject = (void *)stable->winId();

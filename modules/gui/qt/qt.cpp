@@ -671,6 +671,8 @@ static void *ThreadPlatform( void *obj, char *platform_name )
             p_sys->voutWindowType = VOUT_WINDOW_TYPE_WAYLAND;
         else if( platform == qfu("windows") )
             p_sys->voutWindowType = VOUT_WINDOW_TYPE_HWND;
+        else if( platform == qfu("haiku" ) )
+            p_sys->voutWindowType = VOUT_WINDOW_TYPE_QT;
         else if( platform == qfu("cocoa" ) )
             p_sys->voutWindowType = VOUT_WINDOW_TYPE_NSOBJECT;
         else

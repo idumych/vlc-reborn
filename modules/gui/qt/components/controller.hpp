@@ -221,7 +221,11 @@ protected:
     bool b_advancedVisible;
 
 private:
+#ifndef __HAIKU__
     QSizeGrip *grip;
+#else
+    QWidget *grip;
+#endif
 
 protected slots:
     void toggleAdvanced();

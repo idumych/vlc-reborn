@@ -341,7 +341,7 @@ typedef struct {
 
     bool ch_zoom;
     vlc_rational_t zoom;
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     unsigned width_saved;
     unsigned height_saved;
     bool ch_fullscreen;
@@ -600,7 +600,7 @@ static void VoutDisplayEvent(vout_display_t *vd, int event, va_list args)
                                      va_arg(args, const vlc_viewpoint_t *));
         break;
 
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     case VOUT_DISPLAY_EVENT_FULLSCREEN: {
         const int is_fullscreen = (int)va_arg(args, int);
         const bool window_fullscreen = va_arg(args, int);
@@ -760,7 +760,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
     for (;;) {
 
         vlc_mutex_lock(&osys->lock);
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
         bool ch_fullscreen  = osys->ch_fullscreen;
         bool is_fullscreen  = osys->is_fullscreen;
         osys->ch_fullscreen = false;
@@ -789,7 +789,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
             !reset_pictures &&
             osys->is_display_filled == osys->cfg.is_display_filled &&
             !osys->ch_zoom &&
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
             !ch_fullscreen &&
             !ch_wm_state &&
 #endif
@@ -806,7 +806,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
         }
 
         /* */
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
         if (ch_fullscreen) {
             if (osys->window_fullscreen
              || vout_display_Control(vd, VOUT_DISPLAY_CHANGE_FULLSCREEN,
@@ -826,7 +826,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
 
         /* */
         if (ch_display_size) {
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
             osys->width_saved  = osys->cfg.display.width;
             osys->height_saved = osys->cfg.display.height;
 #endif
@@ -852,7 +852,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
 
             vout_display_Control(vd, VOUT_DISPLAY_CHANGE_ZOOM, &osys->cfg);
         }
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
         /* */
         if (ch_wm_state) {
             if (vout_display_Control(vd, VOUT_DISPLAY_CHANGE_WINDOW_STATE, wm_state)) {
@@ -1154,7 +1154,7 @@ static vout_display_t *DisplayNew(vout_thread_t *vout,
 
     osys->zoom.num = cfg->zoom.num;
     osys->zoom.den = cfg->zoom.den;
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
     osys->is_fullscreen  = cfg->is_fullscreen;
     osys->width_saved    = cfg->display.width;
     osys->height_saved   = cfg->display.height;
@@ -1228,7 +1228,7 @@ void vout_DeleteDisplay(vout_display_t *vd, vout_display_state_t *state)
     if (state) {
         if (!osys->is_splitter)
             state->cfg = osys->cfg;
-#if defined(_WIN32) || defined(__OS2__)
+#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
         state->wm_state = osys->wm_state;
 #endif
         state->sar = osys->sar_initial;

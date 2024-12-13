@@ -176,6 +176,7 @@ static vlc_plugin_t *module_InitStatic(vlc_plugin_cb entry)
     return lib;
 }
 
+/* Haiku bug #8288
 #if defined(__ELF__) || !HAVE_DYNAMIC_PLUGINS
 # ifdef __GNUC__
 __attribute__((weak))
@@ -196,9 +197,9 @@ static void module_InitStaticModules(void)
             vlc_plugin_store(lib);
     }
 }
-#else
+#else */
 static void module_InitStaticModules(void) { }
-#endif
+//#endif
 
 #ifdef HAVE_DYNAMIC_PLUGINS
 static const char vlc_entry_name[] = "vlc_entry" MODULE_SUFFIX;

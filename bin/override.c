@@ -125,6 +125,8 @@ static void *getsym (const char *name)
  *
  * Some evil libraries modify the environment. We currently ignore the calls as
  * they could crash the process. This may cause funny behaviour though. */
+#ifndef __HAIKU__
+//not working
 int putenv (char *str)
 {
     if (override)
@@ -135,6 +137,7 @@ int putenv (char *str)
     return CALL(putenv, str);
 }
 
+#endif
 int setenv (const char *name, const char *value, int overwrite)
 {
     if (override)
