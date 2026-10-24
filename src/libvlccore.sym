@@ -121,6 +121,9 @@ FromCharset
 GetLang_1
 GetLang_2B
 GetLang_2T
+vlc_haiku_app_Hold
+vlc_haiku_app_Release
+vlc_haiku_app_SetTarget
 vlc_http_auth_Init
 vlc_http_auth_Deinit
 vlc_http_auth_ParseWwwAuthenticateHeader

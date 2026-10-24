@@ -20,6 +20,21 @@ libminimal_macosx_plugin_la_LDFLAGS = $(AM_LDFLAGS) -rpath '$(guidir)' -Wl,-fram
 EXTRA_LTLIBRARIES += libminimal_macosx_plugin.la
 gui_LTLIBRARIES += $(LTLIBminimal_macosx)
 
+libhaiku_plugin_la_SOURCES = \
+	gui/haiku/haiku.cpp \
+	gui/haiku/Bitmaps.h \
+	gui/haiku/DrawingTidbits.cpp gui/haiku/DrawingTidbits.h \
+	gui/haiku/InterfaceWindow.cpp gui/haiku/InterfaceWindow.h \
+	gui/haiku/MediaControlView.cpp gui/haiku/MediaControlView.h \
+	gui/haiku/MessagesWindow.cpp gui/haiku/MessagesWindow.h \
+	gui/haiku/MsgVals.h \
+	gui/haiku/PlayListWindow.cpp gui/haiku/PlayListWindow.h \
+	gui/haiku/TransportButton.cpp gui/haiku/TransportButton.h
+libhaiku_plugin_la_LIBADD = -lbe -ltracker
+if HAVE_HAIKU
+gui_LTLIBRARIES += libhaiku_plugin.la
+endif
+
 include gui/macosx/Makefile.am
 include gui/qt/Makefile.am
 include gui/skins2/Makefile.am

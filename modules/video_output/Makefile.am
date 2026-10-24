@@ -381,8 +381,7 @@ endif
 
 ### HAIKU ###
 libhaiku_vout_plugin_la_SOURCES = video_output/haiku.cpp
-libhaiku_vout_plugin_la_LIBADD = $(QT_LIBS) $(LIBS_qt) -lbe
-libhaiku_vout_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) $(QT_CFLAGS) $(CXXFLAGS_qt)
+libhaiku_vout_plugin_la_LIBADD = -lbe
 if HAVE_HAIKU
 vout_LTLIBRARIES += libhaiku_vout_plugin.la
 endif

@@ -1,8 +1,10 @@
 /*****************************************************************************
- * haiku.cpp: Haiku video output display module
+ * haiku.cpp: Haiku BBitmap video output
  *****************************************************************************
+ * Copyright (C) 2000-2010 VLC authors and VideoLAN
  * Copyright (C) 2020-2024 Gerasim Troeglazov (3dEyes**)
-
+ * Copyright (C) 2026 VLC authors and VideoLAN
+ *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU Lesser General Public License as published by
  * the Free Software Foundation; either version 2.1 of the License, or
@@ -18,9 +20,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
-/*****************************************************************************
- * Preamble
- *****************************************************************************/
+/*
+ * Like the BeOS video output of VLC 0.x, frames are decoded into BBitmaps
+ * and drawn into a plain BWindow; app_server scales them to the window.
+ */
 
 #ifdef HAVE_CONFIG_H
 # include "config.h"
@@ -30,548 +33,694 @@
 #include <vlc_plugin.h>
 #include <vlc_vout_display.h>
 #include <vlc_picture_pool.h>
+#include <vlc_haiku.h>
 
-#include <QWidget>
-#include <QLabel>
-#include <QImage>
-#include <QPixmap>
-#include <QPainter>
-#include <QPaintEvent>
-#include <QGuiApplication>
-
-#include <SupportDefs.h>
-#include <MessageQueue.h>
-#include <Window.h>
+#include <Application.h>
 #include <Bitmap.h>
+#include <Cursor.h>
+#include <InterfaceDefs.h>
+#include <Message.h>
 #include <Screen.h>
 #include <View.h>
-#include <Rect.h>
-#include <Cursor.h>
+#include <Window.h>
 
-extern "C" {
-	static int				Open( vlc_object_t * );
-	static void				Close( vlc_object_t * );
-	static picture_pool_t	*Pool(vout_display_t *, unsigned count);
-	static void				Display(vout_display_t *, picture_t *, subpicture_t *);
-	static int				Control(vout_display_t *, int, va_list);
-	static void				Manage (vout_display_t *);
-}
+#define VOUT_HAIKU_TITLE "VideoLAN Client " VERSION " (BBitmap output)"
+
+static int  Open(vlc_object_t *);
+static void Close(vlc_object_t *);
+
+#define FILTER_TEXT N_("Smooth scaling")
+#define FILTER_LONGTEXT N_("Filter the picture when it is scaled to the " \
+    "window size. Turn this off on slow machines.")
 
 vlc_module_begin ()
-    set_shortname("Haiku")
+    set_shortname("BBitmap")
     set_category(CAT_VIDEO)
     set_subcategory(SUBCAT_VIDEO_VOUT)
-    set_description("Haiku video output")
-    set_capability("vout display", 100 )
-    add_shortcut("haiku")
+    set_description(N_("Haiku BBitmap video output"))
+    /* Above OpenGL (270): BBitmap is the default output on Haiku */
+    set_capability("vout display", 280)
+    add_bool("haiku-vout-filter", true, FILTER_TEXT, FILTER_LONGTEXT, true)
+    add_shortcut("haiku", "bbitmap")
     add_obsolete_string("haiku-video-driver")
     set_callbacks(Open, Close)
 vlc_module_end ()
 
-/*****************************************************************************
- * Native classes
- *****************************************************************************/
-static uint32 platformHaikuScanCodes[] = {
-		KEY_ESC,		0x01,
-		KEY_F1,			0x02,
-		KEY_F2,			0x03,
-		KEY_F3,			0x04,
-		KEY_F4,			0x05,
-		KEY_F5,			0x06,
-		KEY_F6,			0x07,
-		KEY_F7,			0x08,
-		KEY_F8,			0x09,
-		KEY_F9,			0x0A,
-		KEY_F10,		0x0B,
-		KEY_F11,		0x0C,
-		KEY_F12,		0x0D,
-		KEY_PAUSE,		0x22,
-
-		'`', 			0x11,
-		'1',			0x12,
-		'2',			0x13,
-		'3',			0x14,
-		'4',			0x15,
-		'5',			0x16,
-		'6',			0x17,
-		'7',			0x18,
-		'8',			0x19,
-		'9',			0x1A,
-		'0',			0x1B,
-		'-',			0x1C,
-		'+',			0x1D,
-		KEY_BACKSPACE,	0x1E,
-		KEY_INSERT,		0x1F,
-		KEY_HOME,		0x20,
-		KEY_PAGEUP,		0x21,
-		'/',			0x23,
-		'*',			0x24,
-		'-',			0x25,		
-		                
-		KEY_TAB,		0x26,        
-		'q',			0x27,
-		'w',			0x28,
-		'e',			0x29,
-		'r',			0x2A,
-		't',			0x2B,
-		'y',			0x2C,
-		'u',			0x2D,
-		'i',			0x2E,
-		'o',			0x2F,
-		'p',			0x30,      
-		'[',			0x31,
-		']',			0x32,
-		'\\',			0x33,
-		KEY_DELETE,		0x34,
-		KEY_END,		0x35,
-		KEY_PAGEDOWN,	0x36, 
-		'7',			0x37,
-		'8',			0x38, //numpad
-		'9',			0x39, //numpad
-		'+',			0x3A, //numpad
-
-		'a',			0x3C,
-		's',			0x3D,
-		'd',			0x3E,
-		'f',			0x3F,
-		'g',			0x40,
-		'h',			0x41,
-		'j',			0x42,
-		'k',			0x43,
-		'l',			0x44,
-		';',			0x45,
-		'"',			0x46,
-		KEY_ENTER,		0x47,              
-		'4',			0x48, //numpad
-		'5',			0x49, //numpad
-		'6',			0x4A, //numpad
-
-		'z',			0x4C,
-		'x',			0x4D,
-		'c',			0x4E,
-		'v',			0x4F,
-		'b',			0x50,
-		'n',			0x51,
-		'm',			0x52,
-		',',			0x53,
-		'.',			0x54,
-		'/',			0x55,
-		KEY_UP,			0x57,	//cursor
-		'1',			0x58,	//numpad
-		'2',			0x59,   //numpad
-		'3',			0x5A,   //numpad
-		KEY_ENTER,		0x5B,   //numpad
-
-		' ',			0x5E,
-		KEY_LEFT,		0x61,   //cursor
-		KEY_DOWN,		0x62,   //cursor
-		KEY_RIGHT,		0x63,   //cursor
-		'0',			0x64,   //cursor
-		'.',			0x65,   //numpad
-		0,				0x00
-	};
-	
-static const struct {
-    int haiku;
-    int vlc;
-} platformHaikuMouseButtons[] = {
-    { B_PRIMARY_MOUSE_BUTTON, MOUSE_BUTTON_LEFT },
-    { B_TERTIARY_MOUSE_BUTTON, MOUSE_BUTTON_CENTER },
-    { B_SECONDARY_MOUSE_BUTTON, MOUSE_BUTTON_RIGHT },
-    { -1, -1 }
+/* Messages from the vout thread to the window */
+enum
+{
+    MSG_SET_SIZE       = 'vsiz',
+    MSG_SET_FULLSCREEN = 'vfsc',
+    MSG_SET_ON_TOP     = 'vtop',
+    MSG_HIDE_CURSOR    = 'vhcr',
 };
 
-class FrameBufferView : public BView 
+struct picture_sys_t
 {
- public:
-		FrameBufferView(BRect rect, int width, int height);
-		~FrameBufferView();
-
-		virtual void 	MessageReceived(BMessage *message);
-		virtual void 	Draw(BRect rect);
-		
-		void 			Paint();
-		uint32			*GetBuffer();
-		uint32			GetBufferSize();
-		void			ResizeBitmap(int width, int height);
-		
-		int				Width() { return buffer_width; }
-		int				Height() { return buffer_height; }
- private:
- 		int				buffer_width;
- 		int				buffer_height;
-		BView			*bufferView;
-		BBitmap 		*bufferBitmap;		
+    BBitmap *bitmap;
 };
 
-class VLCVideoWindow : public BWindow {
-	public:
-						VLCVideoWindow(BRect rect, const char* name);
-		virtual			~VLCVideoWindow();
+class VideoView;
+class VideoWindow;
 
-		virtual void 	DispatchMessage(BMessage *message, BHandler *handler);
-		bool			QuitRequested();
-		
-		FrameBufferView* View(void) { return frameBufferView; }
-		BMessageQueue*  Queue(void) { return queue; }
-		void			CloneAndPushMessage(BMessage *message);
-
-		void			SetFullscreen(bool fullscreen);
-		bool			IsFullscreen(void) {return is_fullscreen; }
-
-		void			HideCursor(bool hide);
-
-	private:
-		bool			is_fullscreen;
-		BRect			lastPosition;
-		BPoint			lastMouseClick;
-
-		FrameBufferView	*frameBufferView;
-		BMessageQueue 	*queue;
-		BCursor 		*emptyCursor;
-		bool			dragWindow;
-};
-
-FrameBufferView::FrameBufferView(BRect rect, int width, int height) : 
-	BView(rect, "FrameBufferView", B_FOLLOW_ALL, B_WILL_DRAW | B_FRAME_EVENTS)
+struct vout_display_sys_t
 {
-	buffer_width = width;
-	buffer_height = height;
-	
-	BRect fbRect = BRect(0, 0, buffer_width - 1, buffer_height - 1);
-	bufferBitmap = new BBitmap(fbRect, B_RGB32, true);	
-}
-
-FrameBufferView::~FrameBufferView()
-{
-	delete bufferBitmap;
-}
-
-
-void
-FrameBufferView::MessageReceived(BMessage *message)
-{
-	switch (message->what) {
-		case B_MOUSE_MOVED:
-		case B_MOUSE_WHEEL_CHANGED:
-		{
-			Window()->PostMessage(message);
-			break;
-		}
-		case B_MOUSE_DOWN:		
-		case B_MOUSE_UP:
-		{
-			Window()->PostMessage(message);
-			break;
-		}
-		default:
-			BView::MessageReceived(message);
-			break;
-	}
-}
-
-void
-FrameBufferView::Draw(BRect rect)
-{
-	SetDrawingMode(B_OP_COPY);
-	DrawBitmap(bufferBitmap, rect, rect);
-}
-
-void 
-FrameBufferView::Paint()
-{
-	if(LockLooper())	{
-		SetDrawingMode(B_OP_COPY);
-		DrawBitmap(bufferBitmap);
-		UnlockLooper();
-	}
-}
-
-uint32 *
-FrameBufferView::GetBuffer()
-{
-	if(bufferBitmap == NULL)
-		return NULL;
-	return (uint32*)bufferBitmap->Bits();
-}
-
-uint32	
-FrameBufferView::GetBufferSize()
-{
-	if(bufferBitmap == NULL)
-		return 0;
-	return bufferBitmap->BitsLength();
-}
-
-void	
-FrameBufferView::ResizeBitmap(int w, int h)
-{
-	if(w == buffer_width && h == buffer_height && bufferBitmap != NULL)
-		return;
-	if(LockLooper()) {
-	 	delete bufferBitmap;
-		
-		buffer_width = w;
-		buffer_height = h;
-	
-		BRect	fbRect = BRect(0, 0, buffer_width - 1, buffer_height - 1);
-		bufferBitmap = new BBitmap(fbRect, B_RGB32, true);	
-		
-	 	UnlockLooper();
-	} 	 
-}
-
-
-VLCVideoWindow::VLCVideoWindow(BRect frame, const char* title)
-	: BWindow(frame, title, B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, 0),
-	is_fullscreen(false),
-	dragWindow(false)
-{
-	frameBufferView = new FrameBufferView(Bounds(), frame.Width(), frame.Height());
-	frameBufferView->SetViewColor(0, 0, 0);
-	AddChild(frameBufferView);
-	queue = new BMessageQueue();
-	emptyCursor = new BCursor(B_CURSOR_ID_NO_CURSOR);
-}
-
-
-VLCVideoWindow::~VLCVideoWindow()
-{
-	delete emptyCursor;
-	delete queue;
-}
-
-void 
-VLCVideoWindow::CloneAndPushMessage(BMessage *message)
-{
-	BMessage *clone = new BMessage(*message);
-	queue->Lock();
-	queue->AddMessage(clone);
-	queue->Unlock();
-}
-
-void 
-VLCVideoWindow::DispatchMessage(BMessage *message, BHandler *handler)
-{
-	switch (message->what) {
-		case B_MOUSE_DOWN:
-		{
-			uint32 buttons = 0;
-			message->FindInt32("buttons", (int32 *)&buttons);
-
-			if (buttons & B_PRIMARY_MOUSE_BUTTON) {
-				frameBufferView->SetMouseEventMask(B_POINTER_EVENTS, B_NO_POINTER_HISTORY);
-				message->FindPoint("where", &lastMouseClick);
-				dragWindow = true;
-			}
-			CloneAndPushMessage(message);
-			break;
-		}
-		case B_MOUSE_UP:
-		{
-			frameBufferView->SetViewCursor(B_CURSOR_SYSTEM_DEFAULT);
-			dragWindow = false;
-			CloneAndPushMessage(message);
-			BWindow::DispatchMessage(message, handler);
-			break;
-		}
-		case B_MOUSE_MOVED:
-		{
-			uint32 buttons = 0;
-			message->FindInt32("buttons", (int32 *)&buttons);
-			BPoint where;
-			message->FindPoint("where", &where);
-			BPoint screenWhere;
-			message->FindPoint("screen_where", &screenWhere);
-			
-			if (dragWindow
-			&& buttons & B_PRIMARY_MOUSE_BUTTON
-			&& (fabs(where.x - lastMouseClick.x) >= 0.5
-			|| fabs(where.y - lastMouseClick.y) >= 0.5)) {
-				BCursor cursor(B_CURSOR_ID_MOVE);
-				frameBufferView->SetViewCursor(&cursor);
-				MoveTo(screenWhere - lastMouseClick);
-				break;
-			}
-			CloneAndPushMessage(message);
-			break;
-		}
-		case B_ZOOM:
-		case B_WINDOW_RESIZED:
-		case B_MOUSE_WHEEL_CHANGED:
-		{
-			CloneAndPushMessage(message);
-			break;
-		}
-		case B_UNMAPPED_KEY_DOWN:
-		case B_KEY_DOWN:
-		{
-			CloneAndPushMessage(message);
-			BWindow::DispatchMessage(message, handler);
-			break;
-		}
-		default:
-		{
-			BWindow::DispatchMessage(message, handler);
-			break;
-		}
-	}
-}
-
-bool
-VLCVideoWindow::QuitRequested()
-{
-	BMessage message(B_QUIT_REQUESTED);	
-	CloneAndPushMessage(&message);
-	return false;
-}
-
-void
-VLCVideoWindow::SetFullscreen(bool fullscreen)
-{
-	if (fullscreen == is_fullscreen)
-		return;
-
-	if (fullscreen) {
-		BScreen screen(B_MAIN_SCREEN_ID);
-		lastPosition = Frame();
-		MoveTo(0,0);
-		ResizeTo(screen.Frame().Width() + 1, screen.Frame().Height() + 1);
-		Activate();
-	} else {
-		MoveTo(lastPosition.left, lastPosition.top);
-		ResizeTo(lastPosition.Width(), lastPosition.Height());
-	}
-
-	is_fullscreen = fullscreen;
-}
-
-void
-VLCVideoWindow::HideCursor(bool hide)
-{
-	if (hide && dragWindow)
-		return;
-	if (frameBufferView->LockLooper()) {
-		frameBufferView->SetViewCursor(hide ? emptyCursor : B_CURSOR_SYSTEM_DEFAULT);
-		frameBufferView->UnlockLooper();
-	}
-}
-
-/*****************************************************************************
- * Local prototypes
- *****************************************************************************/
-struct vout_display_sys_t {
-    vout_display_place_t place;
     picture_pool_t *pool;
+    VideoWindow    *window;
+    VideoView      *view;
 
-	/* Embedded widget */
-    QLabel *videoWidget;
-    QImage videoImage;
-    QPixmap videoPixmap;
-
-	/* Native window */
-    VLCVideoWindow *win;
-    FrameBufferView *view;
-    uint32 lastMouseButtons;
-    int	resizeDisplayCount;
-
-    bool isEmbedded;
-
-    int width;
-    int height;
+    vlc_mutex_t     lock;       /* protects the fields below */
+    picture_t      *current;    /* last displayed picture, held */
+    BRect           source;     /* visible part of the picture */
+    BRect           place;      /* where it goes in the view */
+    bool            filter;
 };
 
 /*****************************************************************************
- * OpenVideo: activates haiku vout display method
+ * Key and mouse translation
+ *****************************************************************************/
+static int ModifiersToVLC(uint32 modifiers)
+{
+    int code = 0;
+    if (modifiers & B_SHIFT_KEY)
+        code |= KEY_MODIFIER_SHIFT;
+    /* The command key (Alt by default) is what Ctrl is elsewhere */
+    if (modifiers & B_COMMAND_KEY)
+        code |= KEY_MODIFIER_CTRL;
+    if (modifiers & B_CONTROL_KEY)
+        code |= KEY_MODIFIER_ALT;
+    if (modifiers & B_OPTION_KEY)
+        code |= KEY_MODIFIER_META;
+    return code;
+}
+
+static int KeyToVLC(const BMessage *msg)
+{
+    int32 key = 0, raw_char = 0;
+    uint32 modifiers = 0;
+    const char *bytes = NULL;
+
+    msg->FindInt32("key", &key);
+    msg->FindInt32("raw_char", &raw_char);
+    msg->FindInt32("modifiers", (int32 *)&modifiers);
+    msg->FindString("bytes", &bytes);
+
+    int code = KEY_UNSET;
+    switch (raw_char)
+    {
+        case B_ESCAPE:      code = KEY_ESC; break;
+        case B_BACKSPACE:   code = KEY_BACKSPACE; break;
+        case B_TAB:         code = KEY_TAB; break;
+        case B_ENTER:       code = KEY_ENTER; break;
+        case B_SPACE:       code = ' '; break;
+        case B_LEFT_ARROW:  code = KEY_LEFT; break;
+        case B_RIGHT_ARROW: code = KEY_RIGHT; break;
+        case B_UP_ARROW:    code = KEY_UP; break;
+        case B_DOWN_ARROW:  code = KEY_DOWN; break;
+        case B_INSERT:      code = KEY_INSERT; break;
+        case B_DELETE:      code = KEY_DELETE; break;
+        case B_HOME:        code = KEY_HOME; break;
+        case B_END:         code = KEY_END; break;
+        case B_PAGE_UP:     code = KEY_PAGEUP; break;
+        case B_PAGE_DOWN:   code = KEY_PAGEDOWN; break;
+        case B_FUNCTION_KEY:
+            if (key >= B_F1_KEY && key <= B_F12_KEY)
+                code = KEY_F1 + (key - B_F1_KEY);
+            else if (key == B_PAUSE_KEY)
+                code = KEY_PAUSE;
+            break;
+        default:
+            if ((modifiers & (B_COMMAND_KEY | B_CONTROL_KEY)) == 0
+             && bytes != NULL && (unsigned char)bytes[0] >= 0x20) {
+                /* The character typed, with Shift and the keymap applied */
+                uint32_t cp;
+                const unsigned char *s = (const unsigned char *)bytes;
+                if (s[0] < 0x80)
+                    cp = s[0];
+                else if ((s[0] & 0xe0) == 0xc0)
+                    cp = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
+                else if ((s[0] & 0xf0) == 0xe0)
+                    cp = ((s[0] & 0x0f) << 12) | ((s[1] & 0x3f) << 6)
+                       | (s[2] & 0x3f);
+                else
+                    cp = ((s[0] & 0x07) << 18) | ((s[1] & 0x3f) << 12)
+                       | ((s[2] & 0x3f) << 6) | (s[3] & 0x3f);
+                return cp;
+            }
+            if (raw_char >= 0x20 && raw_char < 0x7f)
+                code = raw_char;
+            break;
+    }
+    if (code == KEY_UNSET)
+        return KEY_UNSET;
+    return code | ModifiersToVLC(modifiers);
+}
+
+static const struct
+{
+    uint32 haiku;
+    int vlc;
+} mouse_buttons[] = {
+    { B_PRIMARY_MOUSE_BUTTON,   MOUSE_BUTTON_LEFT },
+    { B_SECONDARY_MOUSE_BUTTON, MOUSE_BUTTON_RIGHT },
+    { B_TERTIARY_MOUSE_BUTTON,  MOUSE_BUTTON_CENTER },
+};
+
+/*****************************************************************************
+ * VideoView: draws the current BBitmap, scaled, with black borders
+ *****************************************************************************/
+class VideoView : public BView
+{
+public:
+    VideoView(BRect frame, vout_display_t *vd)
+        : BView(frame, "video", B_FOLLOW_ALL,
+                B_WILL_DRAW | B_FRAME_EVENTS | B_FULL_UPDATE_ON_RESIZE),
+          vd(vd), buttons(0), cursor_hidden(false),
+          empty_cursor(B_CURSOR_ID_NO_CURSOR)
+    {
+        SetViewColor(B_TRANSPARENT_COLOR);
+        SetHighColor(0, 0, 0);
+    }
+
+    virtual void Draw(BRect)
+    {
+        vout_display_sys_t *sys = vd->sys;
+
+        vlc_mutex_lock(&sys->lock);
+        DrawFrame(sys->current ? sys->current->p_sys->bitmap : NULL,
+                  sys->source, sys->place, sys->filter);
+        vlc_mutex_unlock(&sys->lock);
+    }
+
+    void DrawFrame(BBitmap *bitmap, BRect source, BRect place, bool filter)
+    {
+        BRect b = Bounds();
+
+        if (bitmap == NULL || !place.IsValid()) {
+            FillRect(b);
+            return;
+        }
+        /* Black borders around the picture */
+        if (place.top > b.top)
+            FillRect(BRect(b.left, b.top, b.right, place.top - 1));
+        if (place.bottom < b.bottom)
+            FillRect(BRect(b.left, place.bottom + 1, b.right, b.bottom));
+        if (place.left > b.left)
+            FillRect(BRect(b.left, place.top, place.left - 1, place.bottom));
+        if (place.right < b.right)
+            FillRect(BRect(place.right + 1, place.top, b.right, place.bottom));
+
+        DrawBitmap(bitmap, source, place,
+                   filter ? B_FILTER_BITMAP_BILINEAR : 0);
+    }
+
+    virtual void FrameResized(float width, float height)
+    {
+        vout_display_SendEventDisplaySize(vd, width + 1, height + 1);
+    }
+
+    virtual void MouseDown(BPoint where)
+    {
+        BMessage *msg = Window()->CurrentMessage();
+        int32 clicks = 1;
+        uint32 now = 0;
+
+        if (msg != NULL) {
+            msg->FindInt32("clicks", &clicks);
+            msg->FindInt32("buttons", (int32 *)&now);
+        }
+        ShowCursor();
+        SetMouseEventMask(B_POINTER_EVENTS, B_NO_POINTER_HISTORY);
+        for (size_t i = 0; i < ARRAY_SIZE(mouse_buttons); i++)
+            if ((now & mouse_buttons[i].haiku) && !(buttons & mouse_buttons[i].haiku))
+                vout_display_SendEventMousePressed(vd, mouse_buttons[i].vlc);
+        buttons = now;
+        if (clicks == 2 && (now & B_PRIMARY_MOUSE_BUTTON))
+            vout_display_SendEventMouseDoubleClick(vd);
+        (void) where;
+    }
+
+    virtual void MouseUp(BPoint)
+    {
+        BMessage *msg = Window()->CurrentMessage();
+        uint32 now = 0;
+
+        if (msg != NULL)
+            msg->FindInt32("buttons", (int32 *)&now);
+        for (size_t i = 0; i < ARRAY_SIZE(mouse_buttons); i++)
+            if ((buttons & mouse_buttons[i].haiku) && !(now & mouse_buttons[i].haiku))
+                vout_display_SendEventMouseReleased(vd, mouse_buttons[i].vlc);
+        buttons = now;
+    }
+
+    virtual void MouseMoved(BPoint where, uint32 transit, const BMessage *)
+    {
+        vout_display_sys_t *sys = vd->sys;
+
+        if (transit == B_EXITED_VIEW || transit == B_OUTSIDE_VIEW)
+            return;
+        ShowCursor();
+
+        vlc_mutex_lock(&sys->lock);
+        vout_display_place_t place;
+        place.x = sys->place.left;
+        place.y = sys->place.top;
+        place.width = sys->place.IntegerWidth() + 1;
+        place.height = sys->place.IntegerHeight() + 1;
+        vlc_mutex_unlock(&sys->lock);
+
+        vout_display_SendMouseMovedDisplayCoordinates(vd, ORIENT_NORMAL,
+                                                      where.x, where.y, &place);
+    }
+
+    virtual void KeyDown(const char *, int32)
+    {
+        BMessage *msg = Window()->CurrentMessage();
+        if (msg == NULL)
+            return;
+
+        int code = KeyToVLC(msg);
+        if (code != KEY_UNSET)
+            vout_display_SendEventKey(vd, code);
+    }
+
+    void HideCursor()
+    {
+        if (!cursor_hidden && buttons == 0) {
+            SetViewCursor(&empty_cursor);
+            cursor_hidden = true;
+        }
+    }
+
+    void ShowCursor()
+    {
+        if (cursor_hidden) {
+            SetViewCursor(B_CURSOR_SYSTEM_DEFAULT);
+            cursor_hidden = false;
+        }
+    }
+
+private:
+    vout_display_t *vd;
+    uint32 buttons;
+    bool cursor_hidden;
+    BCursor empty_cursor;
+};
+
+/*****************************************************************************
+ * VideoWindow
+ *****************************************************************************/
+class VideoWindow : public BWindow
+{
+public:
+    VideoWindow(BRect frame, const char *title, vout_display_t *vd)
+        : BWindow(frame, title, B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
+                  B_ASYNCHRONOUS_CONTROLS),
+          vd(vd), is_fullscreen(false), is_on_top(false)
+    {
+        view = new VideoView(Bounds(), vd);
+        AddChild(view);
+        view->MakeFocus(true);
+        SetSizeLimits(32, 30000, 32, 30000);
+    }
+
+    VideoView *View() const { return view; }
+
+    virtual void MessageReceived(BMessage *msg)
+    {
+        switch (msg->what)
+        {
+            case MSG_SET_SIZE:
+            {
+                int32 width, height;
+                if (!is_fullscreen
+                 && msg->FindInt32("width", &width) == B_OK
+                 && msg->FindInt32("height", &height) == B_OK) {
+                    BRect b = view->Bounds();
+                    if (b.IntegerWidth() + 1 != width
+                     || b.IntegerHeight() + 1 != height)
+                        ResizeTo(width - 1, height - 1);
+                }
+                break;
+            }
+            case MSG_SET_FULLSCREEN:
+                SetFullscreen(msg->FindBool("fullscreen"));
+                break;
+            case MSG_SET_ON_TOP:
+                is_on_top = msg->FindBool("on-top");
+                if (!is_fullscreen)
+                    SetFeel(is_on_top ? B_FLOATING_ALL_WINDOW_FEEL
+                                      : B_NORMAL_WINDOW_FEEL);
+                break;
+            case MSG_HIDE_CURSOR:
+                view->HideCursor();
+                break;
+            case B_SIMPLE_DATA:
+                /* Files dropped on the video: let the interface play them */
+                if (be_app != NULL)
+                    be_app->PostMessage(msg);
+                break;
+            default:
+                BWindow::MessageReceived(msg);
+                break;
+        }
+    }
+
+    virtual void Zoom(BPoint, float, float)
+    {
+        vout_display_SendEventFullscreen(vd, !is_fullscreen, false);
+    }
+
+    virtual bool QuitRequested()
+    {
+        /* Closing the video window stops playback; the window goes away
+         * with the video output. */
+        vout_display_SendEventKey(vd, KEY_MEDIA_STOP);
+        return false;
+    }
+
+    void SetFullscreen(bool fullscreen)
+    {
+        if (fullscreen == is_fullscreen)
+            return;
+        if (fullscreen) {
+            BScreen screen(this);
+            BRect frame = screen.Frame();
+
+            saved_frame = Frame();
+            SetLook(B_NO_BORDER_WINDOW_LOOK);
+            SetFeel(B_FLOATING_ALL_WINDOW_FEEL);
+            SetFlags(Flags() | B_NOT_RESIZABLE | B_NOT_MOVABLE);
+            MoveTo(frame.LeftTop());
+            ResizeTo(frame.Width(), frame.Height());
+            Activate();
+        } else {
+            SetLook(B_TITLED_WINDOW_LOOK);
+            SetFeel(is_on_top ? B_FLOATING_ALL_WINDOW_FEEL
+                              : B_NORMAL_WINDOW_FEEL);
+            SetFlags(Flags() & ~(B_NOT_RESIZABLE | B_NOT_MOVABLE));
+            MoveTo(saved_frame.LeftTop());
+            ResizeTo(saved_frame.Width(), saved_frame.Height());
+            view->ShowCursor();
+        }
+        is_fullscreen = fullscreen;
+    }
+
+private:
+    vout_display_t *vd;
+    VideoView *view;
+    BRect saved_frame;
+    bool is_fullscreen;
+    bool is_on_top;
+};
+
+/*****************************************************************************
+ * Helpers
+ *****************************************************************************/
+/* Recomputes where the picture goes; call with sys->lock held */
+static void UpdatePlace(vout_display_t *vd, const vout_display_cfg_t *cfg)
+{
+    vout_display_sys_t *sys = vd->sys;
+    vout_display_place_t place;
+
+    vout_display_PlacePicture(&place, &vd->source, cfg, false);
+    sys->place = BRect(place.x, place.y,
+                       place.x + place.width - 1, place.y + place.height - 1);
+
+    if (vd->source.orientation == ORIENT_NORMAL)
+        sys->source = BRect(vd->source.i_x_offset, vd->source.i_y_offset,
+                            vd->source.i_x_offset + vd->source.i_visible_width - 1,
+                            vd->source.i_y_offset + vd->source.i_visible_height - 1);
+    else
+        sys->source = BRect(vd->fmt.i_x_offset, vd->fmt.i_y_offset,
+                            vd->fmt.i_x_offset + vd->fmt.i_visible_width - 1,
+                            vd->fmt.i_y_offset + vd->fmt.i_visible_height - 1);
+}
+
+static void Redraw(vout_display_t *vd)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    if (sys->view->LockLooperWithTimeout(100000) == B_OK) {
+        sys->view->Invalidate();
+        sys->view->UnlockLooper();
+    }
+}
+
+static void PostSize(vout_display_t *vd, unsigned width, unsigned height)
+{
+    BMessage msg(MSG_SET_SIZE);
+    msg.AddInt32("width", width);
+    msg.AddInt32("height", height);
+    vd->sys->window->PostMessage(&msg);
+}
+
+/* Fits a default display size on the screen, keeping its aspect */
+static void FitOnScreen(unsigned *width, unsigned *height)
+{
+    BScreen screen(B_MAIN_SCREEN_ID);
+    BRect frame = screen.Frame();
+    float max_w = (frame.Width() + 1) * 0.9f, max_h = (frame.Height() + 1) * 0.85f;
+    float w = *width, h = *height;
+
+    if (w > max_w) {
+        h = h * max_w / w;
+        w = max_w;
+    }
+    if (h > max_h) {
+        w = w * max_h / h;
+        h = max_h;
+    }
+    *width = w > 32 ? w : 32;
+    *height = h > 32 ? h : 32;
+}
+
+/*****************************************************************************
+ * Pictures
+ *****************************************************************************/
+static void DestroyPicture(picture_t *picture)
+{
+    delete picture->p_sys->bitmap;
+    free(picture->p_sys);
+    free(picture);
+}
+
+static picture_pool_t *Pool(vout_display_t *vd, unsigned count)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    if (sys->pool != NULL)
+        return sys->pool;
+
+    /* One more than asked for, since the display keeps the last picture
+     * to redraw the window */
+    count++;
+    picture_t *pictures[count];
+    unsigned i;
+
+    for (i = 0; i < count; i++) {
+        BBitmap *bitmap = new BBitmap(BRect(0, 0, vd->fmt.i_width - 1,
+                                            vd->fmt.i_height - 1), B_RGB32);
+        picture_sys_t *psys = (picture_sys_t *)malloc(sizeof(*psys));
+        if (bitmap->InitCheck() != B_OK || psys == NULL) {
+            delete bitmap;
+            free(psys);
+            break;
+        }
+        memset(bitmap->Bits(), 0, bitmap->BitsLength());
+        psys->bitmap = bitmap;
+
+        picture_resource_t rsc;
+        memset(&rsc, 0, sizeof(rsc));
+        rsc.p_sys = psys;
+        rsc.pf_destroy = DestroyPicture;
+        rsc.p[0].p_pixels = (uint8_t *)bitmap->Bits();
+        rsc.p[0].i_pitch = bitmap->BytesPerRow();
+        rsc.p[0].i_lines = vd->fmt.i_height;
+
+        pictures[i] = picture_NewFromResource(&vd->fmt, &rsc);
+        if (pictures[i] == NULL) {
+            delete bitmap;
+            free(psys);
+            break;
+        }
+    }
+    if (i == 0)
+        return NULL;
+
+    sys->pool = picture_pool_New(i, pictures);
+    if (sys->pool == NULL)
+        while (i > 0)
+            picture_Release(pictures[--i]);
+    return sys->pool;
+}
+
+static void Display(vout_display_t *vd, picture_t *picture,
+                    subpicture_t *subpicture)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    vlc_mutex_lock(&sys->lock);
+    picture_t *previous = sys->current;
+    sys->current = picture;
+    BRect source = sys->source, place = sys->place;
+    bool filter = sys->filter;
+    vlc_mutex_unlock(&sys->lock);
+
+    if (sys->view->LockLooperWithTimeout(100000) == B_OK) {
+        sys->view->DrawFrame(picture->p_sys->bitmap, source, place, filter);
+        sys->view->Sync();
+        sys->view->UnlockLooper();
+    }
+
+    if (previous != NULL)
+        picture_Release(previous);
+    VLC_UNUSED(subpicture);
+}
+
+/*****************************************************************************
+ * Control
+ *****************************************************************************/
+static int Control(vout_display_t *vd, int query, va_list args)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    switch (query)
+    {
+        case VOUT_DISPLAY_HIDE_MOUSE:
+            sys->window->PostMessage(MSG_HIDE_CURSOR);
+            return VLC_SUCCESS;
+
+        case VOUT_DISPLAY_CHANGE_FULLSCREEN:
+        {
+            BMessage msg(MSG_SET_FULLSCREEN);
+            msg.AddBool("fullscreen", va_arg(args, int) != 0);
+            sys->window->PostMessage(&msg);
+            return VLC_SUCCESS;
+        }
+
+        case VOUT_DISPLAY_CHANGE_WINDOW_STATE:
+        {
+            unsigned state = va_arg(args, unsigned);
+            BMessage msg(MSG_SET_ON_TOP);
+            msg.AddBool("on-top", (state & VOUT_WINDOW_STATE_ABOVE) != 0);
+            sys->window->PostMessage(&msg);
+            return VLC_SUCCESS;
+        }
+
+        case VOUT_DISPLAY_CHANGE_DISPLAY_SIZE:
+        {
+            const vout_display_cfg_t *cfg = va_arg(args, const vout_display_cfg_t *);
+            vlc_mutex_lock(&sys->lock);
+            UpdatePlace(vd, cfg);
+            vlc_mutex_unlock(&sys->lock);
+            if (!cfg->is_fullscreen)
+                PostSize(vd, cfg->display.width, cfg->display.height);
+            Redraw(vd);
+            return VLC_SUCCESS;
+        }
+
+        case VOUT_DISPLAY_CHANGE_ZOOM:
+        {
+            const vout_display_cfg_t *cfg = va_arg(args, const vout_display_cfg_t *);
+            if (!cfg->is_fullscreen) {
+                unsigned width, height;
+                vout_display_GetDefaultDisplaySize(&width, &height,
+                                                   &vd->source, cfg);
+                FitOnScreen(&width, &height);
+                PostSize(vd, width, height);
+            }
+            vlc_mutex_lock(&sys->lock);
+            UpdatePlace(vd, cfg);
+            vlc_mutex_unlock(&sys->lock);
+            Redraw(vd);
+            return VLC_SUCCESS;
+        }
+
+        case VOUT_DISPLAY_CHANGE_DISPLAY_FILLED:
+        {
+            const vout_display_cfg_t *cfg = va_arg(args, const vout_display_cfg_t *);
+            vlc_mutex_lock(&sys->lock);
+            UpdatePlace(vd, cfg);
+            vlc_mutex_unlock(&sys->lock);
+            Redraw(vd);
+            return VLC_SUCCESS;
+        }
+
+        case VOUT_DISPLAY_CHANGE_SOURCE_ASPECT:
+        case VOUT_DISPLAY_CHANGE_SOURCE_CROP:
+            vlc_mutex_lock(&sys->lock);
+            UpdatePlace(vd, vd->cfg);
+            vlc_mutex_unlock(&sys->lock);
+            Redraw(vd);
+            return VLC_SUCCESS;
+
+        case VOUT_DISPLAY_RESET_PICTURES:
+        case VOUT_DISPLAY_CHANGE_VIEWPOINT:
+        default:
+            return VLC_EGENERIC;
+    }
+}
+
+/*****************************************************************************
+ * Open / Close
  *****************************************************************************/
 static int Open(vlc_object_t *object)
 {
     vout_display_t *vd = (vout_display_t *)object;
-    vout_display_sys_t *sys;
 
-    vd->sys = sys = (vout_display_sys_t*)calloc(1, sizeof(*sys));
-    if (!sys)
+    if (vlc_haiku_app_Hold(vd))
         return VLC_EGENERIC;
-    
-    sys->pool = NULL;
-    sys->videoWidget = NULL;
-    sys->isEmbedded = false;
-    sys->lastMouseButtons = 0;
-    sys->resizeDisplayCount = 0;
 
-    vout_window_t* window = vout_display_NewWindow(vd, VOUT_WINDOW_TYPE_QT);
-    if (window && window->handle.qtwindow) {
-        sys->isEmbedded = true;
-        sys->videoWidget =  static_cast<QLabel*>(window->handle.qtwindow);
+    vout_display_sys_t *sys = (vout_display_sys_t *)calloc(1, sizeof(*sys));
+    if (sys == NULL) {
+        vlc_haiku_app_Release();
+        return VLC_ENOMEM;
     }
+    vd->sys = sys;
+    vlc_mutex_init(&sys->lock);
+    sys->filter = var_InheritBool(vd, "haiku-vout-filter");
 
+    /* Pictures are BBitmaps of the source size, in the B_RGB32 layout */
     video_format_t fmt;
     video_format_ApplyRotation(&fmt, &vd->fmt);
-
     fmt.i_chroma = VLC_CODEC_RGB32;
     fmt.i_rmask = 0x00ff0000;
     fmt.i_gmask = 0x0000ff00;
     fmt.i_bmask = 0x000000ff;
-
-    if (sys->isEmbedded) {
-		sys->width = fmt.i_width;
-		sys->height = fmt.i_height;
-        sys->videoImage = QImage(sys->width, sys->height, QImage::Format_RGB32);
-        sys->videoImage.fill(Qt::black);
-    } else {
-    	BScreen screen(B_MAIN_SCREEN_ID);
-
-		int display_margin = 128;
-	    int display_width = vd->cfg->display.width;
-	    int display_height = vd->cfg->display.height;
-	    
-	    if (display_margin + display_width > screen.Frame().Width() - display_margin) {
-	    	float zoom = (screen.Frame().Width() - display_margin * 2) / (float)display_width;
-	    	display_width = (float)display_width * zoom;
-	    	display_height = (float)display_height * zoom;
-	    }
-	    if (display_margin + display_height > screen.Frame().Height() - display_margin) {
-	    	float zoom = (screen.Frame().Height() - display_margin * 2) / (float)display_height;
-	    	display_width = (float)display_width * zoom;
-	    	display_height = (float)display_height * zoom;
-	    }
-
-	    vout_display_DeleteWindow(vd, NULL);
-
-	    sys->win = new VLCVideoWindow(BRect(display_margin, display_margin, \
-	    				display_margin + display_width, display_margin + display_height), VOUT_TITLE);
-	    sys->win->Show();
-
-	    if (vd->cfg->display.title)
-	    	sys->win->SetTitle(vd->cfg->display.title);
-	    else
-	    	sys->win->SetTitle(VOUT_TITLE);
-
-	    vout_display_cfg_t place_cfg = *vd->cfg;
-	    place_cfg.display.width  = display_width;
-	    place_cfg.display.height = display_height;
-	    vout_display_PlacePicture(&sys->place, &vd->source, &place_cfg, true);	
-
-	    fmt.i_width  = display_width;
-	    fmt.i_height = display_height;
-	    fmt.i_visible_width = fmt.i_width;
-	    fmt.i_visible_height = fmt.i_height;
-
-		vd->info.has_pictures_invalid = true;
-    }
-
     vd->fmt = fmt;
-    vd->info.needs_hide_mouse = true;
 
+    unsigned width, height;
+    vout_display_GetDefaultDisplaySize(&width, &height, &vd->source, vd->cfg);
+    FitOnScreen(&width, &height);
+
+    BScreen screen(B_MAIN_SCREEN_ID);
+    BRect sf = screen.Frame();
+    float left = sf.left + ((sf.Width() + 1) - width) / 2;
+    float top = sf.top + ((sf.Height() + 1) - height) / 2;
+    BRect frame(left, top, left + width - 1, top + height - 1);
+
+    const char *title = vd->cfg->display.title;
+    sys->window = new VideoWindow(frame, title ? title : VOUT_HAIKU_TITLE, vd);
+    sys->view = sys->window->View();
+
+    vout_display_cfg_t cfg = *vd->cfg;
+    cfg.display.width = width;
+    cfg.display.height = height;
+    UpdatePlace(vd, &cfg);
+
+    vd->info.has_double_click = true;
+    vd->info.needs_hide_mouse = true;
     vd->pool    = Pool;
     vd->prepare = NULL;
     vd->display = Display;
     vd->control = Control;
-    vd->manage  = Manage;
+    vd->manage  = NULL;
 
-    if (!sys->isEmbedded)
-    	vout_display_SendEventDisplaySize(vd, fmt.i_width, fmt.i_height);
-
+    sys->window->Show();
+    vout_display_SendEventDisplaySize(vd, width, height);
+    if (vd->cfg->is_fullscreen)
+        vout_display_SendEventFullscreen(vd, true, false);
     return VLC_SUCCESS;
 }
 
@@ -580,289 +729,14 @@ static void Close(vlc_object_t *object)
     vout_display_t *vd = (vout_display_t *)object;
     vout_display_sys_t *sys = vd->sys;
 
-    if (!sys->isEmbedded) {
-		sys->win->Lock();
-		sys->win->Quit();
-    }
+    if (sys->window->Lock())
+        sys->window->Quit();
 
-    if (sys->pool)
+    if (sys->current != NULL)
+        picture_Release(sys->current);
+    if (sys->pool != NULL)
         picture_pool_Release(sys->pool);
-
+    vlc_mutex_destroy(&sys->lock);
     free(sys);
-}
-
-static picture_pool_t *Pool(vout_display_t *vd, unsigned count)
-{
-    vout_display_sys_t *sys = vd->sys;
-    if (!sys->pool) {
-        picture_resource_t rsc;
-        memset(&rsc, 0, sizeof(rsc));
-        
-        if (sys->isEmbedded) {
-			memset(sys->videoImage.bits(), 0, sys->videoImage.sizeInBytes());
-            rsc.p[0].p_pixels = sys->videoImage.bits();
-            rsc.p[0].i_pitch = sys->videoImage.bytesPerLine();
-            rsc.p[0].i_lines = sys->height;
-        } else {
-			memset((uint8_t*)sys->win->View()->GetBuffer(), 0, sys->win->View()->GetBufferSize());
-			rsc.p[0].p_pixels = (uint8_t*)sys->win->View()->GetBuffer();
-			rsc.p[0].i_pitch = sys->win->View()->Width() * 4;
-			rsc.p[0].i_lines = sys->win->View()->Height();
-        }
-
-        picture_t *p_picture = picture_NewFromResource(&vd->fmt, &rsc);
-        if (!p_picture)
-            return NULL;
-
-        sys->pool = picture_pool_New(1, &p_picture);
-    }    
-    return sys->pool;
-}
-
-static void Display(vout_display_t *vd, picture_t *picture, subpicture_t *subpicture)
-{
-	VLC_UNUSED(subpicture);
-
-    vout_display_sys_t *sys = vd->sys;    
-
-    if (sys->isEmbedded) {
-    	if (sys->videoWidget && !sys->videoImage.isNull() && QGuiApplication::instance()) {
-    		try {
-    			sys->videoPixmap = QPixmap::fromImage(sys->videoImage);
-				sys->videoWidget->setPixmap(sys->videoPixmap);
-			} catch (...) {
-				msg_Err(vd, "exception");
-			}
-		}
-    } else {
-    	sys->win->View()->Paint();
-    }
-
-    picture_Release(picture);
-}
-
-static int Control(vout_display_t *vd, int query, va_list args)
-{
-    vout_display_sys_t *sys = vd->sys;
-
-    switch (query)
-    {
-		case VOUT_DISPLAY_HIDE_MOUSE:
-		{
-			if (sys->isEmbedded) {
-				return VLC_EGENERIC;
-			} else {
-				sys->win->HideCursor(true);
-				return VLC_SUCCESS;
-			}
-		}
-        case VOUT_DISPLAY_CHANGE_DISPLAY_SIZE:
-        {
-            const vout_display_cfg_t *cfg = va_arg(args, const vout_display_cfg_t *);
-            if (sys->isEmbedded) {
-            	if (sys->videoWidget) {
-	                sys->width = cfg->display.width;
-	                sys->height = cfg->display.height;
-	                sys->videoImage = sys->videoImage.scaled(sys->width, sys->height);               
-	                vout_display_SendEventPicturesInvalid(vd);
-            	}
-            } else {
-		        if ((sys->resizeDisplayCount == 1 || sys->resizeDisplayCount == 2) && !cfg->is_fullscreen) {
-		        	sys->resizeDisplayCount++;
-		        	return VLC_EGENERIC;
-		        }
-				sys->win->View()->ResizeBitmap(cfg->display.width, cfg->display.height);
-				if (cfg->is_fullscreen) {
-					vout_display_SendEventPicturesInvalid(vd);
-					return VLC_EGENERIC;
-				} else {
-					sys->win->ResizeTo(cfg->display.width - 1, cfg->display.height - 1);
-				}
-	        	vout_display_SendEventPicturesInvalid(vd);
-				sys->resizeDisplayCount++;
-            }
-            return VLC_SUCCESS;
-        }
-    	case VOUT_DISPLAY_CHANGE_ZOOM:
-    	case VOUT_DISPLAY_CHANGE_DISPLAY_FILLED:
-    	case VOUT_DISPLAY_CHANGE_SOURCE_ASPECT:
-    	{
-        	const vout_display_cfg_t *cfg;
-        	const video_format_t *source;
-
-	        if (query == VOUT_DISPLAY_CHANGE_SOURCE_ASPECT) {
-    	        source = va_arg(args, const video_format_t *);
-        	    cfg = vd->cfg;
-        	} else {
-            	source = &vd->source;
-            	cfg = va_arg(args, const vout_display_cfg_t *);
-        	}
-        	vout_display_SendEventPicturesInvalid(vd);
-        	return VLC_SUCCESS;
-    	}
-		case VOUT_DISPLAY_RESET_PICTURES:
-        {
-            vout_display_place_t place;
-            video_format_t src;
-
-            vout_display_PlacePicture(&place, &vd->source, vd->cfg, false);
-            video_format_ApplyRotation(&src, &vd->source);
-
-            vd->fmt.i_width  = src.i_width;
-            vd->fmt.i_height = src.i_height;
-            vd->fmt.i_visible_width  = place.width;
-            vd->fmt.i_visible_height = place.height;
-            vd->fmt.i_x_offset = place.x;
-            vd->fmt.i_y_offset = place.y;
-
-			if (sys->pool)
-	            picture_pool_Release(sys->pool);
-
-	        sys->pool = NULL;
-  
-	        return VLC_SUCCESS;
-        }
-    	case VOUT_DISPLAY_CHANGE_SOURCE_CROP:
-			return VLC_EGENERIC;
-    	case VOUT_DISPLAY_CHANGE_FULLSCREEN:
-    	{
-    		if (sys->isEmbedded) {
-    			return VLC_EGENERIC;
-    		} else {
-	        	bool fs = va_arg(args, int);
-				sys->win->SetFullscreen(fs);
-		        return VLC_SUCCESS;
-    		}
-    	}
-
-	    default:
-    	    msg_Err(vd, "Unsupported query");
-        	return VLC_EGENERIC;
-    }
-}
-
-static void Manage( vout_display_t *vd )
-{
-	vout_display_sys_t *sys = vd->sys;
-
-	if (!sys->isEmbedded) {
-		while (BMessage* request = sys->win->Queue()->NextMessage()) {
-			switch (request->what) {
-				case B_QUIT_REQUESTED:
-				{
-					vout_display_SendEventKey(vd, KEY_MEDIA_STOP);
-					break;
-				}
-				case B_MOUSE_WHEEL_CHANGED:
-				{
-					uint32 modifiers = 0;
-					request->FindInt32("modifiers", (int32 *)&modifiers);
-	
-					int code = 0;
-	
-					if (modifiers & B_SHIFT_KEY)
-						code |= KEY_MODIFIER_SHIFT;
-					if (modifiers & B_CONTROL_KEY)
-						code |= KEY_MODIFIER_ALT;
-					if (modifiers & B_COMMAND_KEY)
-						code |= KEY_MODIFIER_CTRL;
-	
-					float dx = request->FindFloat("be:wheel_delta_x");
-					float dy = request->FindFloat("be:wheel_delta_y");
-					if (dx > 0.1)
-						vout_display_SendEventKey(vd, KEY_MOUSEWHEELRIGHT | code);
-					if (dx < -0.1)
-						vout_display_SendEventKey(vd, KEY_MOUSEWHEELLEFT | code);
-					if (dy > 0.1)
-						vout_display_SendEventKey(vd, KEY_MOUSEWHEELDOWN | code);
-					if (dy < -0.1)
-						vout_display_SendEventKey(vd, KEY_MOUSEWHEELUP | code);
-					break;
-				}
-				case B_MOUSE_DOWN:
-				{
-					uint32 buttons = 0;
-					request->FindInt32("buttons", (int32 *)&buttons);
-	
-		            for (int i = 0; platformHaikuMouseButtons[i].haiku != -1; i++) {
-		                if (buttons & platformHaikuMouseButtons[i].haiku)
-	                        vout_display_SendEventMousePressed(vd, platformHaikuMouseButtons[i].vlc);
-		            }
-	
-					sys->lastMouseButtons = buttons;
-					break;
-				}
-				case B_MOUSE_UP:
-				{
-					uint32 buttons = 0;
-					request->FindInt32("buttons", (int32 *)&buttons);
-	
-		            for (int i = 0; platformHaikuMouseButtons[i].haiku != -1; i++) {
-		                if (sys->lastMouseButtons & platformHaikuMouseButtons[i].haiku && !(buttons & platformHaikuMouseButtons[i].haiku))
-	                        vout_display_SendEventMouseReleased(vd, platformHaikuMouseButtons[i].vlc);
-		            }
-					break;
-				}
-				case B_MOUSE_MOVED:
-				{
-					uint32 transit;
-					request->FindInt32("be:transit", (int32*)&transit);
-					if (transit == B_ENTERED_VIEW || transit == B_INSIDE_VIEW) {
-						BPoint where;
-						request->FindPoint("be:view_where", &where);
-			            vout_display_place_t place;
-	        		    vout_display_PlacePicture(&place, &vd->source, vd->cfg, false);
-						where.x = (where.x - place.x) * vd->source.i_visible_width / place.width;
-						where.y = (where.y - place.y) * vd->source.i_visible_height / place.height;
-						vout_display_SendEventMouseMoved(vd, where.x, where.y);
-						sys->win->HideCursor(false);
-					}
-					break;
-				}
-				case B_ZOOM:
-				{
-	//				vout_display_SendEventFullscreen(vd, true, false);
-					vout_display_SendEventKey(vd, 'f');
-					break;
-				}
-				case B_WINDOW_RESIZED:
-				{
-					int width = request->FindInt32("width");
-					int height = request->FindInt32("height");
-					vout_display_SendEventDisplaySize(vd, width + 1, height + 1);
-					break;
-				}
-				case B_UNMAPPED_KEY_DOWN:
-				case B_KEY_DOWN:
-				{
-					uint32 modifiers = request->FindInt32("modifiers");
-					uint32 key = request->FindInt32("key");
-	
-					int code = KEY_UNSET;
-					int i = 0;
-					while (platformHaikuScanCodes[i]) {
-						if ( key == platformHaikuScanCodes[i + 1]) {
-							code = platformHaikuScanCodes[i];
-							break;
-						}
-						i += 2;
-					}
-					if (modifiers & B_SHIFT_KEY)
-						code |= KEY_MODIFIER_SHIFT;
-					if (modifiers & B_CONTROL_KEY)
-						code |= KEY_MODIFIER_ALT;
-					if (modifiers & B_COMMAND_KEY)
-						code |= KEY_MODIFIER_CTRL;
-	
-					if (code != KEY_UNSET) {
-						vout_display_SendEventKey(vd, code);
-					}
-					break;
-				}
-				default:
-					break;
-			}
-			delete request;
-		}
-	}	
+    vlc_haiku_app_Release();
 }

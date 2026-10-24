@@ -1695,6 +1695,36 @@ static int ProbeDVD( const char *psz_name )
          goto bailout;
     if( !S_ISREG( stat_info.st_mode ) )
     {
+#ifdef __HAIKU__
+        /* libdvdread crashes while scanning ordinary folders on Haiku: only
+         * let it look at folders that are, or contain, VIDEO_TS */
+        if( S_ISDIR( stat_info.st_mode ) )
+        {
+            const char *psz_base = strrchr( psz_name, '/' );
+            psz_base = psz_base ? psz_base + 1 : psz_name;
+            if( !strcasecmp( psz_base, "VIDEO_TS" ) )
+                ret = VLC_SUCCESS;
+            else
+            {
+                char *psz_ts;
+                struct stat ts_info;
+                if( asprintf( &psz_ts, "%s/VIDEO_TS", psz_name ) != -1 )
+                {
+                    if( vlc_stat( psz_ts, &ts_info ) == 0 )
+                        ret = VLC_SUCCESS;
+                    else
+                    {
+                        psz_ts[strlen( psz_ts ) - 8] = '\0';
+                        strcat( psz_ts, "video_ts" );
+                        if( vlc_stat( psz_ts, &ts_info ) == 0 )
+                            ret = VLC_SUCCESS;
+                    }
+                    free( psz_ts );
+                }
+            }
+            goto bailout;
+        }
+#endif
         if( S_ISDIR( stat_info.st_mode ) || S_ISBLK( stat_info.st_mode ) )
             ret = VLC_SUCCESS; /* Let dvdnav_open() do the probing */
         goto bailout;

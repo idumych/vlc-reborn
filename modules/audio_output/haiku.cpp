@@ -26,6 +26,7 @@
 #include <vlc_common.h>
 #include <vlc_plugin.h>
 #include <vlc_aout.h>
+#include <vlc_haiku.h>
 
 #include <float.h>
 #include <sys/param.h>
@@ -67,6 +68,7 @@ static void Flush    ( audio_output_t *, bool );
 static int  TimeGet  ( audio_output_t *, mtime_t *restrict );
 static int  VolumeSet(audio_output_t* aout, float volume);
 static int  MuteSet  (audio_output_t* aout, bool mute);
+static void ApplyVolume(aout_sys_t* sys);
 
 static void PlayBuffer(void* cookie, void* buffer, size_t size, const media_raw_audio_format &format);
 
@@ -124,7 +126,7 @@ static int Start ( audio_output_t *p_aout, audio_sample_format_t *fmt )
     if (p_sys->player->InitCheck() != B_OK) {
         msg_Err( p_aout, "cannot initialize BSoundPlayer");
 		delete p_sys->player;
-        free(p_sys);
+        p_sys->player = NULL;
         return VLC_EGENERIC;
     }
 
@@ -138,7 +140,7 @@ static int Start ( audio_output_t *p_aout, audio_sample_format_t *fmt )
 
     CreateBuffer( p_aout, AUDIO_BUFFER_SIZE_IN_SECONDS * format.i_rate * format.i_bytes_per_frame );
     
-    VolumeSet(p_aout, 1.0 );
+    ApplyVolume(p_sys);
                       
 	p_sys->player->Start();
 
@@ -188,6 +190,13 @@ static int Open (vlc_object_t *obj)
     if( unlikely( sys == NULL ))
         return VLC_ENOMEM;
 
+    /* The media kit needs a running BApplication */
+    if( vlc_haiku_app_Hold( aout ) )
+    {
+        free( sys );
+        return VLC_EGENERIC;
+    }
+
     aout->sys = sys;
     aout->start = Start;
     aout->stop = Stop;
@@ -195,6 +204,10 @@ static int Open (vlc_object_t *obj)
     aout->volume_set = VolumeSet;
 
     sys->player = NULL;
+    sys->volume = 1.f;
+    sys->mute = false;
+    aout_VolumeReport(aout, sys->volume);
+    aout_MuteReport(aout, sys->mute);
 
     return VLC_SUCCESS;
 }
@@ -205,6 +218,7 @@ static void Close( vlc_object_t *obj )
     aout_sys_t *sys = aout->sys;
 
     free(sys);
+    vlc_haiku_app_Release();
 }
 
 static void Pause( audio_output_t *aout, bool pause, mtime_t date )
@@ -255,21 +269,27 @@ static int TimeGet( audio_output_t *aout, mtime_t *restrict delay )
     return 0;
 }
 
+/* Applies the stored volume and mute state to the player, if any */
+static void ApplyVolume(aout_sys_t* sys)
+{
+    if (sys->player == NULL)
+        return;
+
+    if (sys->mute || sys->volume <= 0.f)
+        sys->player->SetVolume(0.0);
+    else
+        sys->player->SetVolumeDB(lroundf(125.f * log10f(sys->volume)));
+}
+
+/* Volume and mute are kept across streams: the core sets them while no
+ * stream is playing too */
 static int VolumeSet(audio_output_t* aout, float volume)
 {
     aout_sys_t* sys = (aout_sys_t*)aout->sys;
 
-    if (sys->player == NULL)
-    	return VLC_EGENERIC;
-
     sys->volume = volume;
     aout_VolumeReport(aout, volume);
-
-	float dbVol = lroundf(125.f * log10f(volume));
-
-    if (sys->mute == false)
-        sys->player->SetVolumeDB(dbVol);
-
+    ApplyVolume(sys);
     return VLC_SUCCESS;
 }
 
@@ -277,19 +297,9 @@ static int MuteSet(audio_output_t* aout, bool mute)
 {
     aout_sys_t* sys = (aout_sys_t*)aout->sys;
 
-    if (sys->player == NULL)
-    	return VLC_EGENERIC;
-
     sys->mute = mute;
     aout_MuteReport(aout, mute);
-    
-    float dbVol = lroundf(125.f * log10f(sys->volume));
-
-    if (mute == false)
-        sys->player->SetVolumeDB(dbVol);
-    else
-        sys->player->SetVolume(0.0);
-
+    ApplyVolume(sys);
     return VLC_SUCCESS;
 }
 

@@ -112,6 +112,7 @@ noinst_HEADERS = \
 	../include/vlc_codecs.h \
 	../include/vlc_extensions.h \
 	../include/vlc_fixups.h \
+	../include/vlc_haiku.h \
 	../include/vlc_intf_strings.h \
 	../include/vlc_iso_lang.h \
 	../include/vlc_memory.h \
@@ -413,13 +414,14 @@ libvlccore_la_SOURCES += \
 else
 if HAVE_HAIKU
 libvlccore_la_SOURCES += \
+	haiku/application.cpp \
 	haiku/dirs.cpp \
 	haiku/specific.c \
 	posix/error.c \
 	posix/netconf.c \
 	posix/getaddrinfo.c \
 	posix/thread.c
-libvlccore_la_LIBADD += -lgnu -lnetwork
+libvlccore_la_LIBADD += -lgnu -lnetwork -lbe
 else
 if HAVE_DARWIN
 libvlccore_la_SOURCES += \
