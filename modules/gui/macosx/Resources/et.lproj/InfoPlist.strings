@@ -1,0 +1,10 @@
+/* Localized versions of Info.plist keys */
+
+"NSCameraUsageDescription" = "Kasutaja soovil vajab VLC luba kaamera kasutamiseks.";
+"NSMicrophoneUsageDescription" = "Kasutaja soovil vajab VLC luba mikrofoni kasutamiseks.";
+"NSAppleEventsUsageDescription" = "Kasutaja soovil vajab VLC luba väliste meediamängijate peatamiseks ja töö jätkamiseks.";
+"NSDesktopFolderUsageDescription" = "Kasutaja soovil vajab VLC luba ligipääsuks töölauakaustale.";
+"NSDocumentsFolderUsageDescription" = "Kasutaja soovil vajab VLC luba ligipääsuks dokumentide kaustale.";
+"NSDownloadsFolderUsageDescription" = "Kasutaja soovil vajab VLC luba ligipääsuks allalaaditud failide kaustale.";
+"NSNetworkVolumesUsageDescription" = "Kasutaja soovil vajab VLC luba ligipääsuks andmekandjale võrgus.";
+"NSRemovableVolumesUsageDescription" = "Kasutaja soovil vajab VLC luba ligipääsuks eemaldatavale andmekandjale.";

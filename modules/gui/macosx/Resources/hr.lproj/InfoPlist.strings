@@ -1,0 +1,10 @@
+/* Localized versions of Info.plist keys */
+
+"NSCameraUsageDescription" = "VLC želi pristupiti kameri na zahtjev korisnika.";
+"NSMicrophoneUsageDescription" = "VLC želi pristupiti mikrofonu na zahtjev korisnika.";
+"NSAppleEventsUsageDescription" = "VLC želi zaustaviti i nastaviti rad vanjskih izvođača medija.";
+"NSDesktopFolderUsageDescription" = "VLC želi pristupiti mapi radne površine na zahtjev korisnika.";
+"NSDocumentsFolderUsageDescription" = "VLC želi pristupiti mapi dokumenata na zahtjev korisnika.";
+"NSDownloadsFolderUsageDescription" = "VLC želi pristupiti mapi preuzimanja na zahtjev korisnika.";
+"NSNetworkVolumesUsageDescription" = "VLC želi pristupiti mreži na zahtjev korisnika.";
+"NSRemovableVolumesUsageDescription" = "VLC želi pristupiti prenosivom disku na zahtjev korisnika.";

@@ -1,0 +1,10 @@
+/* Localized versions of Info.plist keys */
+
+"NSCameraUsageDescription" = "应用户要求，VLC 希望访问相机。";
+"NSMicrophoneUsageDescription" = "应用户要求，VLC 希望访问麦克风。";
+"NSAppleEventsUsageDescription" = "应用户要求，VLC 希望暂停/继续外部媒体播放器。";
+"NSDesktopFolderUsageDescription" = "应用户要求，VLC 希望访问桌面文件夹。";
+"NSDocumentsFolderUsageDescription" = "应用户要求，VLC 希望访问文档文件夹。";
+"NSDownloadsFolderUsageDescription" = "应用户要求，VLC 希望访问下载文件夹。";
+"NSNetworkVolumesUsageDescription" = "应用户要求，VLC 希望访问网络卷。";
+"NSRemovableVolumesUsageDescription" = "应用户要求，VLC 希望访问可移动卷。";
