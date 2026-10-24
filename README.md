@@ -35,7 +35,7 @@ to VLC 3.0.23 on Haiku: no Qt.
 - Files and folders dropped on a VLC window replace the playlist and
   play; File ▸ Open File adds to it.
 
-![Playlist and messages windows](screenshots/windows.png)
+![Playlist window](screenshots/playlist.png)
 
 ![Menus](screenshots/menus.png)
 
