@@ -3,7 +3,10 @@
 VLC media player for Haiku with its native BeOS-style interface back, and
 the **BBitmap video output** as the default, like it was in 2001:
 
-![VLC 0.2.70 on BeOS, April 2001](https://images.videolan.org/vlc/screenshots/20010412-00.png)
+![VLC 0.2.70 on BeOS, April 2001](screenshots/vlc-0.2.70-beos-2001.png)
+
+*VLC 0.2.70 on BeOS, April 2001 (screenshot from
+[videolan.org](https://images.videolan.org/vlc/screenshots/20010412-00.png))*
 
 VLC used to have a native BeOS interface. It was removed in 2010 (VLC 1.1)
 and today's Haiku port uses Qt. VLC Reborn brings the native interface back
