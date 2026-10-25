@@ -1,7 +1,7 @@
 From e9ea19caffbee285dfac9b5d4e235ea1edfcb0b4 Mon Sep 17 00:00:00 2001
 From: Gerasim Troeglazov <3dEyes@gmail.com>
 Date: Fri, 13 Dec 2024 15:57:06 +1000
-Subject: [PATCH 1/6] Add Haiku support
+Subject: [PATCH 1/7] Add Haiku support
 
 ---
  bin/override.c                                |   3 +
@@ -2298,7 +2298,7 @@ index 36aaa9d..0ac6b4f 100644
 From 5e05bfbc9517b8430305c1e6149f0977a83d1d3e Mon Sep 17 00:00:00 2001
 From: idumych <idumych@gmail.com>
 Date: Sat, 24 Oct 2026 14:08:15 -0700
-Subject: [PATCH 2/6] Haiku: native interface and BBitmap video output by
+Subject: [PATCH 2/7] Haiku: native interface and BBitmap video output by
  default
 
 Bring back the BeOS interface of VLC 0.x (removed in 2010) as the
@@ -11440,10 +11440,10 @@ index a15ba0d..ff47b98 100644
 2.56.0
 
 
-From 6a3c0730a6a55c3fe3d408fd2ebe53d0e69756ab Mon Sep 17 00:00:00 2001
+From 2b5867f7bd26b6d918aabfc3919732484b0c5fd5 Mon Sep 17 00:00:00 2001
 From: idumych <idumych@gmail.com>
 Date: Sat, 24 Oct 2026 17:04:24 -0700
-Subject: [PATCH 3/6] Haiku interface: preferences window
+Subject: [PATCH 3/7] Haiku interface: preferences window
 
 The BeOS preferences window of VLC 0.x, ported to the VLC 3 module and
 configuration API: a tree of categories, subcategories and plugins
@@ -12647,10 +12647,10 @@ index 0000000..2558157
 2.56.0
 
 
-From fb99bbc4558482ed9729b4e5010118fd3ec2c5bf Mon Sep 17 00:00:00 2001
+From eb86a98c601874af4f753e354c5d98a2d066a96d Mon Sep 17 00:00:00 2001
 From: idumych <idumych@gmail.com>
 Date: Sat, 24 Oct 2026 17:18:44 -0700
-Subject: [PATCH 4/6] Haiku API on Linux: --enable-haiku-api for VitruvianOS
+Subject: [PATCH 4/7] Haiku API on Linux: --enable-haiku-api for VitruvianOS
  and Cosmoe
 
 The interface, the BBitmap video output and the BApplication helper
@@ -13110,10 +13110,10 @@ index a78671e..68ddc3a 100644
 2.56.0
 
 
-From 7907a7cfca00723d905ef52139609d6510d9bc80 Mon Sep 17 00:00:00 2001
+From 8b0f39ec453d5fe2498823e0748be78ef71ffb51 Mon Sep 17 00:00:00 2001
 From: idumych <idumych@gmail.com>
 Date: Sat, 24 Oct 2026 17:29:05 -0700
-Subject: [PATCH 5/6] vlc: no global hotkeys interface with the Haiku API
+Subject: [PATCH 5/7] vlc: no global hotkeys interface with the Haiku API
 
 There is no global hotkeys module on Haiku, VitruvianOS or the Cosmoe
 builds (it needs X11), so asking for it only printed an error at
@@ -13142,10 +13142,10 @@ index 72e0eee..259afa0 100644
 2.56.0
 
 
-From 2fb686199bff0a46dc70f89aa890a51961d52d22 Mon Sep 17 00:00:00 2001
+From 384970217667e0b1a00a1589b842184e9f7e6ef8 Mon Sep 17 00:00:00 2001
 From: idumych <idumych@gmail.com>
 Date: Sat, 24 Oct 2026 18:18:58 -0700
-Subject: [PATCH 6/6] Haiku API: keep the plugins loaded and wait for windows
+Subject: [PATCH 6/7] Haiku API: keep the plugins loaded and wait for windows
  to go away
 
 On VitruvianOS, BWindow::Quit() called from another thread (and
@@ -13291,6 +13291,68 @@ index 8358dce..e3bc740 100644
  
      if (sys->current != NULL)
          picture_Release(sys->current);
+-- 
+2.56.0
+
+
+From 611933396885f7b3151100e921032f4fdc5d0619 Mon Sep 17 00:00:00 2001
+From: idumych <idumych@gmail.com>
+Date: Sat, 24 Oct 2026 18:32:51 -0700
+Subject: [PATCH 7/7] avcodec: no hardware formats without a hardware decoder
+ module
+
+Builds without VA-API and VDPAU (the Haiku API ones) have no "hw decoder"
+module, so trying each hardware format only failed to set up the video
+output, logging errors, before falling back to software decoding.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ modules/codec/avcodec/video.c | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/modules/codec/avcodec/video.c b/modules/codec/avcodec/video.c
+index 3412a7f..1b75dc0 100644
+--- a/modules/codec/avcodec/video.c
++++ b/modules/codec/avcodec/video.c
+@@ -34,6 +34,7 @@
+ #include <vlc_avcodec.h>
+ #include <vlc_cpu.h>
+ #include <vlc_atomic.h>
++#include <vlc_modules.h>
+ #include <assert.h>
+ 
+ #include <libavcodec/avcodec.h>
+@@ -682,6 +683,21 @@ static int ffmpeg_OpenVa(decoder_t *p_dec, AVCodecContext *p_context,
+     return VLC_SUCCESS;
+ }
+ 
++/* Without a hardware decoder module (builds with neither VA-API nor VDPAU,
++ * such as the Haiku API ones), each hardware format would only fail to set up
++ * the video output before falling back to software decoding */
++static bool HasHwDecoderModule(void)
++{
++    size_t count;
++    module_t **list = module_list_get(&count);
++    bool found = false;
++
++    for (size_t i = 0; i < count && !found; i++)
++        found = module_provides(list[i], "hw decoder");
++    module_list_free(list);
++    return found;
++}
++
+ static const enum PixelFormat hwfmts[] =
+ {
+ #ifdef _WIN32
+@@ -1830,7 +1846,7 @@ no_reuse:
+     p_sys->profile = p_context->profile;
+     p_sys->level = p_context->level;
+ 
+-    if (!can_hwaccel)
++    if (!can_hwaccel || !HasHwDecoderModule())
+         return swfmt;
+ 
+ #if (LIBAVCODEC_VERSION_MICRO >= 100) && !(LIBAVCODEC_VERSION_CHECK(57, 83, 101))
 -- 
 2.56.0
 
