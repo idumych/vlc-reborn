@@ -1733,7 +1733,15 @@ static int lavc_GetFrame(struct AVCodecContext *ctx, AVFrame *frame, int flags)
 
     pic = decoder_NewPicture(dec);
     if (pic == NULL)
+    {
+        /* No picture from the video output (it is stopping, as when the
+         * decoder is killed while frame threads still decode, or it ran
+         * out): let libavcodec allocate the frame instead of failing the
+         * slice. DecodeBlock() copies it to a picture, or drops it. */
+        if (sys->p_va == NULL)
+            return avcodec_default_get_buffer2(ctx, frame, flags);
         return -ENOMEM;
+    }
 
     if (sys->p_va != NULL)
         return lavc_va_GetFrame(ctx, frame, pic);
