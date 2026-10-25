@@ -407,6 +407,29 @@ AM_CONDITIONAL(HAVE_LINUX,   test "${SYS}" = "linux")
 AM_CONDITIONAL(HAVE_OS2,     test "${SYS}" = "os2")
 AM_CONDITIONAL(HAVE_HAIKU,     test "${SYS}" = "haiku")
 
+dnl
+dnl  Haiku API: the native interface and video output, on Haiku and on
+dnl  systems that provide the Haiku API (VitruvianOS, Cosmoe)
+dnl
+AC_ARG_ENABLE([haiku-api],
+  AS_HELP_STRING([--enable-haiku-api],
+    [Haiku interface and BBitmap video output (default enabled on Haiku)]),, [
+  AS_IF([test "${SYS}" = "haiku"], [enable_haiku_api="yes"], [enable_haiku_api="no"])
+])
+AC_ARG_VAR([HAIKU_API_CFLAGS], [C++ flags for the Haiku API headers])
+AC_ARG_VAR([HAIKU_API_LIBS], [linker flags for the Haiku API libraries])
+AS_IF([test "${enable_haiku_api}" = "yes"], [
+  AS_IF([test -z "${HAIKU_API_LIBS}"], [
+    AS_IF([test "${SYS}" = "haiku"], [
+      HAIKU_API_LIBS="-lbe"
+    ], [
+      AC_MSG_ERROR([Set HAIKU_API_CFLAGS and HAIKU_API_LIBS to use the Haiku API (VitruvianOS SDK or Cosmoe).])
+    ])
+  ])
+  AC_DEFINE([VLC_HAIKU_API], 1, [Define to 1 to build the Haiku API interface and video output.])
+])
+AM_CONDITIONAL([HAVE_HAIKU_API], [test "${enable_haiku_api}" = "yes"])
+
 AM_CONDITIONAL(HAVE_DARWIN,  test "${SYS}" = "darwin")
 AM_CONDITIONAL(HAVE_IOS,     test "${HAVE_IOS}" = "1")
 AM_CONDITIONAL(HAVE_OSX,     test "${HAVE_OSX}" = "1")

@@ -414,14 +414,13 @@ libvlccore_la_SOURCES += \
 else
 if HAVE_HAIKU
 libvlccore_la_SOURCES += \
-	haiku/application.cpp \
 	haiku/dirs.cpp \
 	haiku/specific.c \
 	posix/error.c \
 	posix/netconf.c \
 	posix/getaddrinfo.c \
 	posix/thread.c
-libvlccore_la_LIBADD += -lgnu -lnetwork -lbe
+libvlccore_la_LIBADD += -lgnu -lnetwork
 else
 if HAVE_DARWIN
 libvlccore_la_SOURCES += \
@@ -475,6 +474,14 @@ libvlccore_la_SOURCES += \
 AM_CPPFLAGS += -DUPDATE_CHECK
 AM_CFLAGS += $(GCRYPT_CFLAGS)
 libvlccore_la_LIBADD += $(GCRYPT_LIBS)
+endif
+
+if HAVE_HAIKU_API
+libvlccore_la_SOURCES += haiku/application.cpp
+libvlccore_la_CXXFLAGS = $(AM_CXXFLAGS) $(HAIKU_API_CFLAGS)
+libvlccore_la_LIBADD += $(HAIKU_API_LIBS)
+else
+libvlccore_la_SOURCES += misc/haiku_stub.c
 endif
 
 libvlccore_la_LDFLAGS = \

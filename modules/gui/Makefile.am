@@ -31,8 +31,9 @@ libhaiku_plugin_la_SOURCES = \
 	gui/haiku/PlayListWindow.cpp gui/haiku/PlayListWindow.h \
 	gui/haiku/PreferencesWindow.cpp gui/haiku/PreferencesWindow.h \
 	gui/haiku/TransportButton.cpp gui/haiku/TransportButton.h
-libhaiku_plugin_la_LIBADD = -lbe -ltracker
-if HAVE_HAIKU
+libhaiku_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) $(HAIKU_API_CFLAGS)
+libhaiku_plugin_la_LIBADD = $(HAIKU_API_LIBS) -ltracker
+if HAVE_HAIKU_API
 gui_LTLIBRARIES += libhaiku_plugin.la
 endif
 

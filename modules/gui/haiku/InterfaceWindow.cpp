@@ -31,10 +31,12 @@
 #include <AppKit.h>
 #include <StorageKit.h>
 #include <SupportKit.h>
+#ifdef __HAIKU__
 #include <Drivers.h>
 #include <fs_info.h>
 #include <fcntl.h>
 #include <unistd.h>
+#endif
 
 /* VLC headers */
 #ifdef HAVE_CONFIG_H
@@ -107,6 +109,7 @@ make_sure_frame_is_within_limits( BRect& frame, float minWidth, float minHeight,
         frame.bottom = frame.top + maxHeight;
 }
 
+#ifdef __HAIKU__
 // get_volume_info
 bool
 get_volume_info( BVolume& volume, BString& volumeName, bool& isCDROM, BString& deviceName )
@@ -140,6 +143,7 @@ get_volume_info( BVolume& volume, BString& volumeName, bool& isCDROM, BString& d
      }
      return success;
 }
+#endif
 
 /* Playlist callbacks run on other threads: just poke the window */
 static int PlaylistChanged( vlc_object_t *p_this, const char * psz_variable,
@@ -1124,6 +1128,7 @@ void CDMenu::AttachedToWindow(void)
 int CDMenu::GetCD()
 {
     int i_count = 0;
+#ifdef __HAIKU__
     BVolumeRoster volRoster;
     BVolume vol;
     status_t status = volRoster.GetNextVolume( &vol );
@@ -1144,6 +1149,7 @@ int CDMenu::GetCD()
         vol.Unset();
         status = volRoster.GetNextVolume( &vol );
     }
+#endif
     return i_count;
 }
 

@@ -24,6 +24,13 @@
 #ifndef VLC_VOUT_DISPLAY_H
 #define VLC_VOUT_DISPLAY_H 1
 
+/* Haiku and the Haiku API (VitruvianOS, Cosmoe) use the display's own
+ * fullscreen and window-state controls; on Haiku this is always on, so
+ * that plugins built outside VLC see the same structures */
+#if defined(__HAIKU__) && !defined(VLC_HAIKU_API)
+# define VLC_HAIKU_API 1
+#endif
+
 #include <vlc_es.h>
 #include <vlc_picture.h>
 #include <vlc_picture_pool.h>
@@ -81,7 +88,7 @@ enum {
  * Initial/Current configuration for a vout_display_t
  */
 typedef struct {
-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
+#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
     bool is_fullscreen VLC_DEPRECATED;  /* Is the display fullscreen */
 #endif
 
@@ -148,7 +155,7 @@ enum {
      */
     VOUT_DISPLAY_RESET_PICTURES,
 
-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
+#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
     /* Ask the module to acknowledge/refuse the fullscreen state change after
      * being requested (externally or by VOUT_DISPLAY_EVENT_FULLSCREEN */
     VOUT_DISPLAY_CHANGE_FULLSCREEN VLC_DEPRECATED_ENUM,     /* bool fs */
@@ -196,7 +203,7 @@ enum {
     /* */
     VOUT_DISPLAY_EVENT_PICTURES_INVALID,    /* The buffer are now invalid and need to be changed */
 
-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
+#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
     VOUT_DISPLAY_EVENT_FULLSCREEN,
     VOUT_DISPLAY_EVENT_WINDOW_STATE,
 #endif
@@ -369,7 +376,7 @@ static inline void vout_display_SendEventKey(vout_display_t *vd, int key)
 {
     vout_display_SendEvent(vd, VOUT_DISPLAY_EVENT_KEY, key);
 }
-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
+#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
 static inline void vout_display_SendEventFullscreen(vout_display_t *vd, bool is_fullscreen,
                                                     bool is_window_fullscreen)
 {

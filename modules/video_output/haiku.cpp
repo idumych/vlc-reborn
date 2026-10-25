@@ -568,8 +568,16 @@ static void Display(vout_display_t *vd, picture_t *picture,
     vlc_mutex_unlock(&sys->lock);
 
     if (sys->view->LockLooperWithTimeout(100000) == B_OK) {
+#ifdef __HAIKU__
+        /* Draw now and wait for app_server, so that frames don't pile up */
         sys->view->DrawFrame(picture->p_sys->bitmap, source, place, filter);
         sys->view->Sync();
+#else
+        /* Cosmoe and VitruvianOS only show what Draw() paints: ask for a
+         * redraw of the picture, which stays held until the next one */
+        sys->view->Invalidate();
+        VLC_UNUSED(source); VLC_UNUSED(place); VLC_UNUSED(filter);
+#endif
         sys->view->UnlockLooper();
     }
 
