@@ -53,13 +53,14 @@ to VLC 3.0.23, with no Qt, on three platforms:
 
 ![Menus](docs/screenshots/menus.png)
 
-VitruvianOS runs the Haiku API on Linux, so VLC looks the same there:
+VitruvianOS runs the Haiku API on Linux, so VLC looks the same there, here
+with the OpenGL output:
 
-![VLC Reborn on VitruvianOS 0.6.2](docs/screenshots/vitruvianos-desktop.png)
+![VLC Reborn on VitruvianOS 0.6.2, OpenGL output](docs/screenshots/vitruvianos-opengl.png)
 
-On Linux, through Hokku:
+On Linux, through Hokku, also with the OpenGL output:
 
-![VLC Reborn on Linux](docs/screenshots/linux.png)
+![VLC Reborn on Linux, OpenGL output](docs/screenshots/linux-opengl.png)
 
 ## Install
 
