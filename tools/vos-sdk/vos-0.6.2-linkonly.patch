@@ -1,0 +1,74 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 044f0b4..db897e2 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -23,7 +23,8 @@ include(build/engine.cmake)
+ add_subdirectory(src)
+ 
+ if(NOT BUILDTOOLS_MODE STREQUAL "1")
+-	include(build/packages.cmake)
++	# folio: link-only build, no OS image packaging
++	#include(build/packages.cmake)
+ 	set(BUILDTOOLS_MODE "no" )
+ endif()
+ 
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 7f9e07d..d206fa5 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -1,15 +1,9 @@
+ if(NOT BUILDTOOLS_MODE STREQUAL "1")
+ 
++# Folio link-only build: just the libraries an application links against.
+ add_subdirectory(system)
+-add_subdirectory(bin)
+-add_subdirectory(tools)
+ add_subdirectory(libs)
+ add_subdirectory(kits)
+-add_subdirectory(servers)
+-add_subdirectory(add-ons)
+-add_subdirectory(apps)
+-add_subdirectory(preferences)
+-add_subdirectory(data)
+ 
+ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+ 	add_subdirectory(tests)
+diff --git a/src/kits/CMakeLists.txt b/src/kits/CMakeLists.txt
+index 6697791..80bfe3b 100644
+--- a/src/kits/CMakeLists.txt
++++ b/src/kits/CMakeLists.txt
+@@ -43,15 +43,15 @@ AddOn(
+ UsePrivateHeaders(be_bootstrap interface app support)
+ 
+ add_subdirectory(app)
+-add_subdirectory(bluetooth)
+-add_subdirectory(game)
++#folio: add_subdirectory(bluetooth)
++#folio: add_subdirectory(game)
+ add_subdirectory(interface)
+ add_subdirectory(locale)
+-add_subdirectory(media2)
+-add_subdirectory(network)
++#folio: add_subdirectory(media2)
++#folio: add_subdirectory(network)
+ #add_subdirectory(print)
+-add_subdirectory(opengl)
+-add_subdirectory(screensaver)
++#folio: add_subdirectory(opengl)
++#folio: add_subdirectory(screensaver)
+ add_subdirectory(shared)
+ add_subdirectory(storage)
+ add_subdirectory(support)
+diff --git a/src/system/libroot2/CMakeLists.txt b/src/system/libroot2/CMakeLists.txt
+index 5940fcf..c19c04c 100644
+--- a/src/system/libroot2/CMakeLists.txt
++++ b/src/system/libroot2/CMakeLists.txt
+@@ -61,7 +61,7 @@ target_sources(root PRIVATE
+ # Debug-only vref tracing, off by default: set VREF_TRACE=/dir and re-add this.
+ # target_compile_definitions(root PRIVATE ENABLE_VREF_TRACKING)
+ 
+-add_dependencies(root nexus)
++#folio: add_dependencies(root nexus)  # only packages nexus-dkms
+ 
+ target_include_directories(root PRIVATE
+ 	"./"

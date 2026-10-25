@@ -1,0 +1,7 @@
+/obj/
+/.cosmoe/
+/dist/
+/.reborn-bootstrapped
+*.AppImage
+*.deb
+*.hpkg

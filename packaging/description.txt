@@ -1,0 +1,4 @@
+VLC media player with the native BeOS-style interface: a small window
+with the classic transport buttons, seek and volume sliders, and a
+BBitmap video output window, as in VLC's BeOS days. Includes a playlist,
+messages and preferences window.

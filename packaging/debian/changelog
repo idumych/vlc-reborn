@@ -1,0 +1,6 @@
+vlc (3.0.23-4) unstable; urgency=medium
+
+  * VLC Reborn for VitruvianOS: the native Haiku-API interface (with its
+    preferences window) and the BBitmap video output.
+
+ -- idumych <idumych@gmail.com>  Sat, 24 Oct 2026 18:00:00 -0700

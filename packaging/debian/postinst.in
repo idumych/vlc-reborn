@@ -1,0 +1,35 @@
+#!/bin/sh
+# postinst: dpkg does not keep extended attributes, and VitruvianOS stores
+# BeOS attributes (app signature, flags, version, file types) as user.beos.*
+# xattrs. Copy them from the placeholder in the attribute tarball onto the
+# installed binary. Never move or copy the placeholder FILE itself: it is
+# empty, and would replace the program.
+set -e
+
+case "$1" in
+	configure) ;;
+	*) exit 0 ;;
+esac
+
+APP=/system/apps/@APP_NAME@
+ATTRS=/usr/share/@APP_CMD@/apps_attrs.tar
+
+if [ -f "$ATTRS" ] && [ -s "$APP" ] \
+		&& command -v getfattr >/dev/null 2>&1 \
+		&& command -v setfattr >/dev/null 2>&1; then
+	_tmp=$(mktemp -d)
+	if tar --xattrs --xattrs-include='user.*' -xf "$ATTRS" -C "$_tmp"; then
+		# getfattr prints "# file: system/apps/@APP_NAME@"; restoring from /
+		# puts the attributes on the real binary.
+		( cd "$_tmp" && getfattr --absolute-names -d -m '^user\.beos\.' \
+				-e hex system/apps/@APP_NAME@ ) \
+			| ( cd / && setfattr --restore=- ) || true
+	fi
+	rm -rf "$_tmp"
+fi
+
+# Let the registrar learn the signature and file types now, if it runs.
+if command -v mimeset >/dev/null 2>&1; then
+	timeout 20 mimeset -f "$APP" >/dev/null 2>&1 || true
+fi
+exit 0

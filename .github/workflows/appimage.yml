@@ -1,0 +1,108 @@
+name: appimage
+
+# VLC Reborn for any x86_64 or aarch64 Linux desktop, built with Hokku (Cosmoe fork) on
+# Ubuntu 24.04 so the AppImage runs on that glibc or newer. One job per architecture, each
+# native (ubuntu-24.04 / ubuntu-24.04-arm), each starting the AppImage it built under X11
+# (Xvfb) and Wayland (headless sway). Run it by hand before a release
+# (gh workflow run appimage.yml --ref <branch>) and test those artifacts; on a v* tag it
+# attaches each AppImage to the release only if that file isn't attached yet.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: App settings
+        id: app
+        run: |
+          . ./haiku-app.env
+          echo "file=$APP_NAME-$VERSION-${{ matrix.arch }}.AppImage" >> "$GITHUB_OUTPUT"
+          REPO=${COSMOE_REPO:-idumych/hokku}
+          TAG=${COSMOE_TAG:-hokku}
+          echo "cosmoe=$(echo $REPO | tr / -)-$(git ls-remote https://github.com/$REPO.git "$TAG" | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Install build dependencies
+        run: |
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update
+          # Hokku's build deps, VLC's own (apt-get build-dep vlc), autotools
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            build-essential meson ninja-build pkg-config flex bison curl file \
+            libcairo2-dev libpng-dev libjpeg-dev libwebp-dev libtiff-dev \
+            zlib1g-dev libicu-dev libpango1.0-dev libicns-dev libraw-dev \
+            libpixman-1-dev libfontconfig1-dev libglib2.0-dev \
+            libx11-dev libx11-xcb-dev libxcursor-dev libxrandr-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            wayland-protocols libfuse3-dev desktop-file-utils \
+            autoconf automake libtool gettext
+          sudo DEBIAN_FRONTEND=noninteractive apt-get build-dep -y vlc
+
+      - name: Cache Cosmoe build
+        uses: actions/cache@v4
+        with:
+          path: .cosmoe/stage
+          key: cosmoe-${{ steps.app.outputs.cosmoe }}-ubuntu-24.04-${{ matrix.arch }}-release
+
+      - name: Build AppImage
+        run: |
+          sh packaging/appimage/build-appimage.sh
+          file ${{ steps.app.outputs.file }}
+          ls -l ${{ steps.app.outputs.file }}
+
+      - name: Smoke-test tools
+        run: |
+          sudo DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y --no-install-recommends \
+            sway grim xvfb openbox imagemagick xdotool
+
+      - name: X11 smoke test (Xvfb)
+        timeout-minutes: 5
+        env:
+          SMOKE_WINDOW: VideoLAN Client
+          SMOKE_PROCESS: vlc
+        run: sh packaging/appimage/x11-smoke.sh ${{ steps.app.outputs.file }} x11-smoke
+
+      - name: Wayland smoke test (headless sway)
+        timeout-minutes: 5
+        run: sh packaging/appimage/wayland-smoke.sh ${{ steps.app.outputs.file }} wayland-smoke
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.arch }}
+          path: |
+            x11-smoke/
+            wayland-smoke/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AppImage-${{ matrix.arch }}
+          path: ${{ steps.app.outputs.file }}
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          F=${{ steps.app.outputs.file }}
+          if gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets[].name' | grep -qx "$F"; then
+            echo "Release already has $F; leaving it."
+          else
+            gh release upload "${GITHUB_REF_NAME}" "$F"
+          fi
