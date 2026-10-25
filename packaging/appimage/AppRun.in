@@ -1,13 +1,14 @@
 #!/bin/sh
 # AppImage entry point for VLC Reborn. Cosmoe finds its add-ons and data
 # next to usr/lib/libbe.so; VLC finds its plugins and data relative to
-# libvlccore, and these make it explicit:
-#  - VLC_PLUGIN_PATH / VLC_DATA_PATH, VLC's plugins, Lua scripts and data;
+# libvlccore (not VLC_PLUGIN_PATH: VLC scans it as well as its own plugin
+# directory, so every module would be loaded twice). These make the rest
+# explicit:
+#  - VLC_DATA_PATH, VLC's Lua scripts and data;
 #  - fontconfig, for the bundled Noto fonts;
 #  - TRANSLATORS, Cosmoe's image translators (one path only: AddPaths()
 #    drops a character from all but the last entry).
 HERE=$(dirname "$(readlink -f "$0")")
-export VLC_PLUGIN_PATH="$HERE/usr/lib/vlc/plugins"
 export VLC_DATA_PATH="$HERE/usr/share/vlc"
 export FONTCONFIG_FILE="$HERE/etc/fonts/fonts.conf"
 export TRANSLATORS="$HERE/usr/lib/addons/Translators"
