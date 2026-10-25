@@ -69,7 +69,7 @@ Download the package for your system from the
 **Haiku R1/beta6** (with the current updates, hrev59866_92 or later; run
 SoftwareUpdater first if pkgman complains about `haiku`):
 
-    pkgman install ./vlc-3.0.23-4-x86_64.hpkg
+    pkgman install ./vlc-3.0.23-5-x86_64.hpkg
 
 pkgman also installs the libraries VLC needs from HaikuPorts. The package
 replaces HaikuPorts' `vlc` (the same version with a newer revision); a
@@ -80,7 +80,7 @@ Tracker's “Open with…” menu for audio and video files, register it once:
 
 **VitruvianOS 0.6**:
 
-    sudo apt install ./vlc_3.0.23-4_amd64.deb      # or _arm64.deb
+    sudo apt install ./vlc_3.0.23-5_amd64.deb      # or _arm64.deb
 
 apt installs the libraries from Debian. VLC goes to `/opt/vlc`, with
 `/system/apps/VLC`, a Deskbar entry and the `vlc` command. It replaces
