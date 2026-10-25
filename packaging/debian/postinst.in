@@ -28,6 +28,12 @@ if [ -f "$ATTRS" ] && [ -s "$APP" ] \
 	rm -rf "$_tmp"
 fi
 
+# VLC's plugin cache, for the plugins as installed (stripping after the
+# build changed them)
+if [ -x /opt/vlc/lib/vlc/vlc-cache-gen ]; then
+	/opt/vlc/lib/vlc/vlc-cache-gen /opt/vlc/lib/vlc/plugins >/dev/null 2>&1 || true
+fi
+
 # Let the registrar learn the signature and file types now, if it runs.
 if command -v mimeset >/dev/null 2>&1; then
 	timeout 20 mimeset -f "$APP" >/dev/null 2>&1 || true

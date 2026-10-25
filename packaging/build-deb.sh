@@ -29,6 +29,10 @@ done
 
 # 1. VLC, against the VitruvianOS Haiku API
 rm -rf "$BUILD"
+# vlc-cache-gen runs during the build and loads libvlccore, which needs the
+# SDK's libbe
+VOS_LIBDIR=$(pkg-config --variable=libdir vos)
+LD_LIBRARY_PATH="$VOS_LIBDIR:$VOS_LIBDIR/../linkdeps${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 HAIKU_API_CFLAGS="$(pkg-config --cflags vos) -fPIC" \
 HAIKU_API_LIBS="$(pkg-config --libs vos)" \
 	sh packaging/build-vlc.sh "$PREFIX" "$PKG"

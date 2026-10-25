@@ -69,7 +69,10 @@ jobs:
       - name: Smoke-test tools
         run: |
           sudo DEBIAN_FRONTEND=noninteractive timeout 300 apt-get install -y --no-install-recommends \
-            sway grim xvfb openbox imagemagick xdotool
+            sway grim xvfb openbox imagemagick xdotool pulseaudio
+          # A desktop has a sound server; without one VLC logs errors at start
+          pulseaudio --start --exit-idle-time=-1
+          pactl info | grep -E 'Server Name|Default Sink'
 
       - name: X11 smoke test (Xvfb)
         timeout-minutes: 5
