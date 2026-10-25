@@ -36,6 +36,7 @@ class BMessageRunner;
 class MediaControlView;
 class MessagesWindow;
 class PlayListWindow;
+class PreferencesWindow;
 
 class CDMenu : public BMenu
 {
@@ -110,6 +111,7 @@ class InterfaceWindow : public BWindow
     BFilePanel*             fFilePanel;
     PlayListWindow*         fPlaylistWindow;
     MessagesWindow*         fMessagesWindow;
+    PreferencesWindow*      fPreferencesWindow;
     BMessageRunner*         fUpdateRunner;
     BMenuBar*               fMenuBar;
     BMenuItem*              fNextTitleMI;

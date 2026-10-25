@@ -29,6 +29,7 @@ libhaiku_plugin_la_SOURCES = \
 	gui/haiku/MessagesWindow.cpp gui/haiku/MessagesWindow.h \
 	gui/haiku/MsgVals.h \
 	gui/haiku/PlayListWindow.cpp gui/haiku/PlayListWindow.h \
+	gui/haiku/PreferencesWindow.cpp gui/haiku/PreferencesWindow.h \
 	gui/haiku/TransportButton.cpp gui/haiku/TransportButton.h
 libhaiku_plugin_la_LIBADD = -lbe -ltracker
 if HAVE_HAIKU

@@ -54,6 +54,7 @@
 #include "MediaControlView.h"
 #include "PlayListWindow.h"
 #include "MessagesWindow.h"
+#include "PreferencesWindow.h"
 #include "InterfaceWindow.h"
 
 #define INTERFACE_UPDATE_PERIOD   100000
@@ -234,6 +235,7 @@ InterfaceWindow::InterfaceWindow( intf_thread_t * _p_intf, BRect frame,
       p_playlist( pl_Get( _p_intf ) ),
 
       fFilePanel( NULL ),
+      fPreferencesWindow( NULL ),
       fUpdateRunner( NULL ),
       fLastUpdateTime( system_time() ),
       fSettings( new BMessage( 'sett' ) )
@@ -354,6 +356,8 @@ InterfaceWindow::InterfaceWindow( intf_thread_t * _p_intf, BRect frame,
     showMenu->AddItem( new BMenuItem( psz_tmp, new BMessage( OPEN_PLAYLIST ), 'P') );
     ADD_ELLIPSIS( _("Messages") );
     showMenu->AddItem( new BMenuItem( psz_tmp, new BMessage( OPEN_MESSAGES ), 'M' ) );
+    ADD_ELLIPSIS( _("Preferences") );
+    showMenu->AddItem( new BMenuItem( psz_tmp, new BMessage( OPEN_PREFERENCES ), 'S' ) );
     showMenu->AddSeparatorItem();
     showMenu->AddItem( fFullscreenMI = new BMenuItem( _("Fullscreen"),
                                       new BMessage( TOGGLE_FULL_SCREEN ), 'F' ) );
@@ -427,6 +431,8 @@ InterfaceWindow::Detach()
 
     fPlaylistWindow->ReallyQuit();
     fMessagesWindow->ReallyQuit();
+    if( fPreferencesWindow )
+        fPreferencesWindow->ReallyQuit();
 }
 
 /*****************************************************************************
@@ -503,6 +509,28 @@ void InterfaceWindow::MessageReceived( BMessage * p_message )
         case OPEN_MESSAGES:
             fMessagesWindow->Subscribe();
             _ShowWindow( fMessagesWindow );
+            break;
+
+        case OPEN_PREFERENCES:
+            if( !fPreferencesWindow )
+            {
+                /* Built on first use: it reads every module's options */
+                BScreen screen( this );
+                BRect s = screen.Frame();
+                BRect frame( ( s.right - PREFS_WINDOW_WIDTH ) / 2,
+                             ( s.bottom - PREFS_WINDOW_HEIGHT ) / 2,
+                             ( s.right + PREFS_WINDOW_WIDTH ) / 2,
+                             ( s.bottom + PREFS_WINDOW_HEIGHT ) / 2 );
+                BRect saved;
+                if( fSettings->FindRect( "settings frame", &saved ) == B_OK )
+                {
+                    make_sure_frame_is_on_screen( saved );
+                    frame = saved;
+                }
+                fPreferencesWindow = new PreferencesWindow( p_intf, frame,
+                                                            _("Preferences") );
+            }
+            _ShowWindow( fPreferencesWindow );
             break;
 
         case OPEN_DVD:
@@ -1042,6 +1070,13 @@ InterfaceWindow::_StoreSettings()
         if (fSettings->ReplaceBool( "messages showing", !fMessagesWindow->IsHidden() ) != B_OK)
             fSettings->AddBool( "messages showing", !fMessagesWindow->IsHidden() );
         fMessagesWindow->Unlock();
+    }
+
+    if ( fPreferencesWindow && fPreferencesWindow->Lock() )
+    {
+        if (fSettings->ReplaceRect( "settings frame", fPreferencesWindow->Frame() ) != B_OK)
+            fSettings->AddRect( "settings frame", fPreferencesWindow->Frame() );
+        fPreferencesWindow->Unlock();
     }
 
     /* Don't store the runtime pointer */
