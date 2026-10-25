@@ -47,7 +47,7 @@ APPDIR="$ROOT/obj/AppDir"
 rm -rf "$APPDIR"
 INC="-I$CROOT/include"
 for d in config os os/app os/game os/interface os/kernel os/locale os/media os/net \
-		os/storage os/support os/translation os/be_apps/Tracker private/interface \
+		os/storage os/support os/translation os/be_apps/Tracker os/opengl private/interface \
 		private/shared private/support posix; do
 	INC="$INC -I$CROOT/include/$d"
 done
@@ -55,7 +55,7 @@ done
 LD_LIBRARY_PATH="$CROOT/lib" \
 HAIKU_API_CFLAGS="$INC -DAPP_COSMOE -fPIC" \
 HAIKU_API_LIBS="-L$CROOT/lib -lbe" \
-	sh packaging/build-vlc.sh /usr "$APPDIR"
+	sh packaging/build-vlc.sh /usr "$APPDIR" HAIKU_GL_LIBS="-L$CROOT/lib -lopengl"
 find "$APPDIR/usr" -name '*.la' -delete
 rm -rf "$APPDIR/usr/include" "$APPDIR/usr/lib/pkgconfig" \
 	"$APPDIR/usr/share/applications" "$APPDIR/usr/share/metainfo" "$APPDIR/usr/share/kde4"
@@ -65,7 +65,8 @@ rm -f "$APPDIR/usr/bin/cvlc" "$APPDIR/usr/bin/rvlc" "$APPDIR/usr/bin/nvlc" \
 # 3. Cosmoe's libraries, add-ons, data and fonts
 DOC="$APPDIR/usr/share/doc/$APP_CMD"
 mkdir -p "$APPDIR/usr/share/cosmoe" "$APPDIR/usr/share/fonts/noto" "$APPDIR/etc/fonts" "$DOC"
-for lib in libbe.so libtracker.so libcosmoe-x11.so libcosmoe-wayland.so; do
+# libopengl: BGLView, for VLC's OpenGL output (the host's libEGL renders)
+for lib in libbe.so libtracker.so libopengl.so libcosmoe-x11.so libcosmoe-wayland.so; do
 	install -m 0755 "$CROOT/lib/$lib" "$APPDIR/usr/lib/$lib"
 done
 cp -a "$CROOT/lib/addons" "$APPDIR/usr/lib/"

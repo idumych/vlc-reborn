@@ -35,7 +35,7 @@ rm -rf "$BUILD"
 VLC_SKIP_CACHE_GEN=1 \
 HAIKU_API_CFLAGS="$(pkg-config --cflags vos) -fPIC" \
 HAIKU_API_LIBS="$(pkg-config --libs vos)" \
-	sh packaging/build-vlc.sh "$PREFIX" "$PKG"
+	sh packaging/build-vlc.sh "$PREFIX" "$PKG" HAIKU_GL_LIBS=-lopengl
 find "$PKG$PREFIX" -name '*.la' -delete
 rm -rf "$PKG$PREFIX/include" "$PKG$PREFIX/lib/pkgconfig" \
 	"$PKG$PREFIX/share/applications" "$PKG$PREFIX/share/icons" \

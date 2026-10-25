@@ -60,7 +60,7 @@ if [ ! -e "$LINKDEPS/libmedia2.so" ]; then
 	g++ -shared -fPIC -Wl,-soname,libgame.so "$WORK/game.cpp" -o "$LINKDEPS/libgame.so"
 fi
 
-say "libroot, libbe, libtranslation, libtracker ($ARCH)"
+say "libroot, libbe, libtranslation, libtracker, libopengl ($ARCH)"
 G=$SRC/vos/generated
 mkdir -p "$G"
 ( cd "$G"
@@ -68,7 +68,7 @@ mkdir -p "$G"
 	-DHOST_KERNEL="$(uname -r)" -DKERNEL_RELEASE="$(uname -r)" \
 	-DVITRUVIAN_TARGET_ARCH=$ARCH $CMAKE_OPTS \
 	-DCMAKE_SHARED_LINKER_FLAGS="-L$LINKDEPS" .. -GNinja > /dev/null
-  LIBRARY_PATH=$LINKDEPS ninja -j"$JOBS" root be translation tracker )
+  LIBRARY_PATH=$LINKDEPS ninja -j"$JOBS" root be translation tracker opengl )
 
 say "SDK in $SDK"
 rm -rf "$SDK"; mkdir -p "$SDK/include/vos" "$SDK/lib" "$SDK/bin" "$SDK/linkdeps"
@@ -76,7 +76,8 @@ rm -rf "$SDK"; mkdir -p "$SDK/include/vos" "$SDK/lib" "$SDK/bin" "$SDK/linkdeps"
 	--exclude=./tools . ) | tar xf - -C "$SDK/include/vos"
 cp "$G/src/system/libroot.so" "$G/src/kits/libbe.so" \
 	"$G/src/kits/tracker/libtracker.so" "$G/src/kits/translation/libtranslation.so" \
-	"$G/src/kits/textencoding/libtextencoding.so" "$SDK/lib/"
+	"$G/src/kits/textencoding/libtextencoding.so" "$G/src/kits/opengl/libopengl.so" \
+	"$SDK/lib/"
 cp -a "$LINKDEPS"/*.so "$SDK/linkdeps/"
 B=$SRC/vos/buildtools/src/bin
 cp "$B/rc/rc" "$B/xres" "$B/resattr" "$SDK/bin/"

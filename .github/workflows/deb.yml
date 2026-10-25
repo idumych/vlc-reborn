@@ -40,7 +40,7 @@ jobs:
             zlib1g-dev libicu-dev libfreetype6-dev libpng-dev libjpeg-dev libgif-dev \
             libtiff-dev libwebp-dev libicns-dev libopenexr-dev libdrm-dev libinput-dev \
             libevdev-dev libseat-dev libelf-dev libncurses-dev libpam0g-dev libglib2.0-dev \
-            libudev-dev libsystemd-dev libblkid-dev libxkbcommon-dev \
+            libudev-dev libsystemd-dev libblkid-dev libxkbcommon-dev libgl-dev libegl-dev \
             autoconf automake libtool gettext
           DEBIAN_FRONTEND=noninteractive apt-get build-dep -y vlc
 
