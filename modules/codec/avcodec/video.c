@@ -34,6 +34,7 @@
 #include <vlc_avcodec.h>
 #include <vlc_cpu.h>
 #include <vlc_atomic.h>
+#include <vlc_modules.h>
 #include <assert.h>
 
 #include <libavcodec/avcodec.h>
@@ -680,6 +681,21 @@ static int ffmpeg_OpenVa(decoder_t *p_dec, AVCodecContext *p_context,
     p_sys->pix_fmt = hwfmt;
     p_context->draw_horiz_band = NULL;
     return VLC_SUCCESS;
+}
+
+/* Without a hardware decoder module (builds with neither VA-API nor VDPAU,
+ * such as the Haiku API ones), each hardware format would only fail to set up
+ * the video output before falling back to software decoding */
+static bool HasHwDecoderModule(void)
+{
+    size_t count;
+    module_t **list = module_list_get(&count);
+    bool found = false;
+
+    for (size_t i = 0; i < count && !found; i++)
+        found = module_provides(list[i], "hw decoder");
+    module_list_free(list);
+    return found;
 }
 
 static const enum PixelFormat hwfmts[] =
@@ -1830,7 +1846,7 @@ no_reuse:
     p_sys->profile = p_context->profile;
     p_sys->level = p_context->level;
 
-    if (!can_hwaccel)
+    if (!can_hwaccel || !HasHwDecoderModule())
         return swfmt;
 
 #if (LIBAVCODEC_VERSION_MICRO >= 100) && !(LIBAVCODEC_VERSION_CHECK(57, 83, 101))
