@@ -366,11 +366,18 @@ void PreferencesWindow::Apply( bool doIt )
 /*****************************************************************************
  * PreferencesWindow::ReallyQuit
  *****************************************************************************/
-void PreferencesWindow::ReallyQuit()
+void
+PreferencesWindow::ReallyQuit()
 {
+    /* Wait until the window is gone: on VitruvianOS, Quit() from another
+     * thread (and wait_for_thread()) can return before it is */
+    BMessenger messenger( this );
     Lock();
     Hide();
     Quit();
+    /* The looper's port goes away at the end of its destructor */
+    for( int i = 0; i < 200 && messenger.IsValid(); i++ )
+        snooze( 10000 );
 }
 
 /***********************************************************************

@@ -40,6 +40,7 @@
 #include <Cursor.h>
 #include <InterfaceDefs.h>
 #include <Message.h>
+#include <Messenger.h>
 #include <Screen.h>
 #include <View.h>
 #include <Window.h>
@@ -64,6 +65,9 @@ vlc_module_begin ()
     add_shortcut("haiku", "bbitmap")
     add_obsolete_string("haiku-video-driver")
     set_callbacks(Open, Close)
+    /* The window thread runs this plugin's code until it is gone, which
+     * Quit() doesn't wait for everywhere (VitruvianOS) */
+    cannot_unload_broken_library()
 vlc_module_end ()
 
 /* Messages from the vout thread to the window */
@@ -737,8 +741,13 @@ static void Close(vlc_object_t *object)
     vout_display_t *vd = (vout_display_t *)object;
     vout_display_sys_t *sys = vd->sys;
 
+    /* Wait until the window is gone: on VitruvianOS, Quit() from another
+     * thread (and wait_for_thread()) can return before it is */
+    BMessenger messenger(sys->window);
     if (sys->window->Lock())
         sys->window->Quit();
+    for (int i = 0; i < 200 && messenger.IsValid(); i++)
+        snooze(10000);
 
     if (sys->current != NULL)
         picture_Release(sys->current);

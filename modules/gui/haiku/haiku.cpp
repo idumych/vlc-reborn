@@ -60,6 +60,9 @@ vlc_module_begin ()
     set_capability( "interface", 160 )
     set_callbacks( Open, Close )
     add_shortcut( "haiku", "beos" )
+    /* Window threads run this plugin's code until they are gone, which
+     * Quit() doesn't wait for everywhere (VitruvianOS) */
+    cannot_unload_broken_library()
 vlc_module_end ()
 
 struct intf_sys_t
@@ -111,8 +114,13 @@ static void Close( vlc_object_t *p_this )
 
     vlc_haiku_app_SetTarget( NULL );
     p_window->Detach();
+    /* Wait until the window is gone: on VitruvianOS, Quit() from another
+     * thread (and wait_for_thread()) can return before it is */
+    BMessenger messenger( p_window );
     if( p_window->Lock() )
         p_window->Quit();
+    for( int i = 0; i < 200 && messenger.IsValid(); i++ )
+        snooze( 10000 );
 
     free( p_intf->p_sys );
     vlc_haiku_app_Release();
