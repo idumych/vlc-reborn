@@ -31,6 +31,7 @@ cd obj/vlc-build
 	--disable-qt --disable-skins2 --disable-xcb --disable-wayland \
 	--disable-update-check --disable-static \
 	--disable-dbus --disable-gst-decode \
+	--disable-vdpau --disable-libva \
 	"$@"
 # VLC_SKIP_CACHE_GEN=1: don't run vlc-cache-gen (it skips the plugin cache
 # when build and host differ). For targets whose Haiku API libraries can't

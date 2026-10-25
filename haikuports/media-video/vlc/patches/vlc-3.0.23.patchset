@@ -1,7 +1,7 @@
 From e9ea19caffbee285dfac9b5d4e235ea1edfcb0b4 Mon Sep 17 00:00:00 2001
 From: Gerasim Troeglazov <3dEyes@gmail.com>
 Date: Fri, 13 Dec 2024 15:57:06 +1000
-Subject: [PATCH 1/2] Add Haiku support
+Subject: [PATCH 1/6] Add Haiku support
 
 ---
  bin/override.c                                |   3 +
@@ -2298,7 +2298,7 @@ index 36aaa9d..0ac6b4f 100644
 From 5e05bfbc9517b8430305c1e6149f0977a83d1d3e Mon Sep 17 00:00:00 2001
 From: idumych <idumych@gmail.com>
 Date: Sat, 24 Oct 2026 14:08:15 -0700
-Subject: [PATCH 2/2] Haiku: native interface and BBitmap video output by
+Subject: [PATCH 2/6] Haiku: native interface and BBitmap video output by
  default
 
 Bring back the BeOS interface of VLC 0.x (removed in 2010) as the
@@ -11436,6 +11436,1861 @@ index a15ba0d..ff47b98 100644
  vlc_http_auth_Init
  vlc_http_auth_Deinit
  vlc_http_auth_ParseWwwAuthenticateHeader
+-- 
+2.56.0
+
+
+From 6a3c0730a6a55c3fe3d408fd2ebe53d0e69756ab Mon Sep 17 00:00:00 2001
+From: idumych <idumych@gmail.com>
+Date: Sat, 24 Oct 2026 17:04:24 -0700
+Subject: [PATCH 3/6] Haiku interface: preferences window
+
+The BeOS preferences window of VLC 0.x, ported to the VLC 3 module and
+configuration API: a tree of categories, subcategories and plugins
+built from the modules' own options, a panel per entry built when it
+is first shown, and Defaults, Save and Apply. Window > Preferences
+(Alt+S).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ modules/gui/Makefile.am                 |   1 +
+ modules/gui/haiku/InterfaceWindow.cpp   |  35 +
+ modules/gui/haiku/InterfaceWindow.h     |   2 +
+ modules/gui/haiku/PreferencesWindow.cpp | 930 ++++++++++++++++++++++++
+ modules/gui/haiku/PreferencesWindow.h   | 126 ++++
+ 5 files changed, 1094 insertions(+)
+ create mode 100644 modules/gui/haiku/PreferencesWindow.cpp
+ create mode 100644 modules/gui/haiku/PreferencesWindow.h
+
+diff --git a/modules/gui/Makefile.am b/modules/gui/Makefile.am
+index 8aa56d2..3f23fd5 100644
+--- a/modules/gui/Makefile.am
++++ b/modules/gui/Makefile.am
+@@ -29,6 +29,7 @@ libhaiku_plugin_la_SOURCES = \
+ 	gui/haiku/MessagesWindow.cpp gui/haiku/MessagesWindow.h \
+ 	gui/haiku/MsgVals.h \
+ 	gui/haiku/PlayListWindow.cpp gui/haiku/PlayListWindow.h \
++	gui/haiku/PreferencesWindow.cpp gui/haiku/PreferencesWindow.h \
+ 	gui/haiku/TransportButton.cpp gui/haiku/TransportButton.h
+ libhaiku_plugin_la_LIBADD = -lbe -ltracker
+ if HAVE_HAIKU
+diff --git a/modules/gui/haiku/InterfaceWindow.cpp b/modules/gui/haiku/InterfaceWindow.cpp
+index d18c75d..b702c9c 100644
+--- a/modules/gui/haiku/InterfaceWindow.cpp
++++ b/modules/gui/haiku/InterfaceWindow.cpp
+@@ -54,6 +54,7 @@
+ #include "MediaControlView.h"
+ #include "PlayListWindow.h"
+ #include "MessagesWindow.h"
++#include "PreferencesWindow.h"
+ #include "InterfaceWindow.h"
+ 
+ #define INTERFACE_UPDATE_PERIOD   100000
+@@ -234,6 +235,7 @@ InterfaceWindow::InterfaceWindow( intf_thread_t * _p_intf, BRect frame,
+       p_playlist( pl_Get( _p_intf ) ),
+ 
+       fFilePanel( NULL ),
++      fPreferencesWindow( NULL ),
+       fUpdateRunner( NULL ),
+       fLastUpdateTime( system_time() ),
+       fSettings( new BMessage( 'sett' ) )
+@@ -354,6 +356,8 @@ InterfaceWindow::InterfaceWindow( intf_thread_t * _p_intf, BRect frame,
+     showMenu->AddItem( new BMenuItem( psz_tmp, new BMessage( OPEN_PLAYLIST ), 'P') );
+     ADD_ELLIPSIS( _("Messages") );
+     showMenu->AddItem( new BMenuItem( psz_tmp, new BMessage( OPEN_MESSAGES ), 'M' ) );
++    ADD_ELLIPSIS( _("Preferences") );
++    showMenu->AddItem( new BMenuItem( psz_tmp, new BMessage( OPEN_PREFERENCES ), 'S' ) );
+     showMenu->AddSeparatorItem();
+     showMenu->AddItem( fFullscreenMI = new BMenuItem( _("Fullscreen"),
+                                       new BMessage( TOGGLE_FULL_SCREEN ), 'F' ) );
+@@ -427,6 +431,8 @@ InterfaceWindow::Detach()
+ 
+     fPlaylistWindow->ReallyQuit();
+     fMessagesWindow->ReallyQuit();
++    if( fPreferencesWindow )
++        fPreferencesWindow->ReallyQuit();
+ }
+ 
+ /*****************************************************************************
+@@ -505,6 +511,28 @@ void InterfaceWindow::MessageReceived( BMessage * p_message )
+             _ShowWindow( fMessagesWindow );
+             break;
+ 
++        case OPEN_PREFERENCES:
++            if( !fPreferencesWindow )
++            {
++                /* Built on first use: it reads every module's options */
++                BScreen screen( this );
++                BRect s = screen.Frame();
++                BRect frame( ( s.right - PREFS_WINDOW_WIDTH ) / 2,
++                             ( s.bottom - PREFS_WINDOW_HEIGHT ) / 2,
++                             ( s.right + PREFS_WINDOW_WIDTH ) / 2,
++                             ( s.bottom + PREFS_WINDOW_HEIGHT ) / 2 );
++                BRect saved;
++                if( fSettings->FindRect( "settings frame", &saved ) == B_OK )
++                {
++                    make_sure_frame_is_on_screen( saved );
++                    frame = saved;
++                }
++                fPreferencesWindow = new PreferencesWindow( p_intf, frame,
++                                                            _("Preferences") );
++            }
++            _ShowWindow( fPreferencesWindow );
++            break;
++
+         case OPEN_DVD:
+         {
+             const char * psz_device;
+@@ -1044,6 +1072,13 @@ InterfaceWindow::_StoreSettings()
+         fMessagesWindow->Unlock();
+     }
+ 
++    if ( fPreferencesWindow && fPreferencesWindow->Lock() )
++    {
++        if (fSettings->ReplaceRect( "settings frame", fPreferencesWindow->Frame() ) != B_OK)
++            fSettings->AddRect( "settings frame", fPreferencesWindow->Frame() );
++        fPreferencesWindow->Unlock();
++    }
++
+     /* Don't store the runtime pointer */
+     BMessage settings( *fSettings );
+     settings.RemoveName( "messenger" );
+diff --git a/modules/gui/haiku/InterfaceWindow.h b/modules/gui/haiku/InterfaceWindow.h
+index 6bfed51..1e23a84 100644
+--- a/modules/gui/haiku/InterfaceWindow.h
++++ b/modules/gui/haiku/InterfaceWindow.h
+@@ -36,6 +36,7 @@ class BMessageRunner;
+ class MediaControlView;
+ class MessagesWindow;
+ class PlayListWindow;
++class PreferencesWindow;
+ 
+ class CDMenu : public BMenu
+ {
+@@ -110,6 +111,7 @@ class InterfaceWindow : public BWindow
+     BFilePanel*             fFilePanel;
+     PlayListWindow*         fPlaylistWindow;
+     MessagesWindow*         fMessagesWindow;
++    PreferencesWindow*      fPreferencesWindow;
+     BMessageRunner*         fUpdateRunner;
+     BMenuBar*               fMenuBar;
+     BMenuItem*              fNextTitleMI;
+diff --git a/modules/gui/haiku/PreferencesWindow.cpp b/modules/gui/haiku/PreferencesWindow.cpp
+new file mode 100644
+index 0000000..ccda4c4
+--- /dev/null
++++ b/modules/gui/haiku/PreferencesWindow.cpp
+@@ -0,0 +1,930 @@
++/*****************************************************************************
++ * PreferencesWindow.cpp: Haiku interface preferences window
++ *****************************************************************************
++ * Copyright (C) 1999, 2000, 2001 the VideoLAN team
++ * Copyright (C) 2026 VLC authors and VideoLAN
++ *
++ * Authors: Eric Petit <titer@m0k.org>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
++ *****************************************************************************/
++
++/*
++ * Like the BeOS preferences window of VLC 0.x, this is built from the
++ * modules' own configuration: a tree of categories, subcategories and
++ * plugins, and for each one a panel with a control per option.
++ */
++
++#include <InterfaceKit.h>
++#include <SupportKit.h>
++
++#ifdef HAVE_CONFIG_H
++# include "config.h"
++#endif
++
++#include <vlc_common.h>
++#include <vlc_interface.h>
++#include <vlc_modules.h>
++#include <vlc_plugin.h>
++#include <vlc_config_cat.h>
++#include <vlc_charset.h>
++
++#include "PreferencesWindow.h"
++
++#define TYPE_CATEGORY    0
++#define TYPE_SUBCATEGORY 2
++#define TYPE_MODULE      3
++
++#define ROW_HEIGHT       25
++
++/* The general subcategories are shown on their category's own panel,
++ * as in the Qt interface */
++static bool IsGeneralSubcategory( int id )
++{
++    return id == SUBCAT_VIDEO_GENERAL || id == SUBCAT_ADVANCED_MISC
++        || id == SUBCAT_INPUT_GENERAL || id == SUBCAT_INTERFACE_GENERAL
++        || id == SUBCAT_SOUT_GENERAL || id == SUBCAT_PLAYLIST_GENERAL
++        || id == SUBCAT_AUDIO_GENERAL;
++}
++
++/*****************************************************************************
++ * PreferencesWindow::PreferencesWindow
++ *****************************************************************************/
++PreferencesWindow::PreferencesWindow( intf_thread_t * _p_intf,
++                                      BRect frame, const char * name )
++    : BWindow( frame, name, B_FLOATING_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
++               B_NOT_ZOOMABLE | B_ASYNCHRONOUS_CONTROLS )
++{
++    p_intf   = _p_intf;
++    fCurrent = NULL;
++
++    BRect rect;
++
++    SetSizeLimits( PREFS_WINDOW_WIDTH, 2000, PREFS_WINDOW_HEIGHT, 2000 );
++
++    /* The "background" view */
++    fPrefsView = new BView( Bounds(), NULL, B_FOLLOW_ALL, B_WILL_DRAW );
++    fPrefsView->SetViewUIColor( B_PANEL_BACKGROUND_COLOR );
++    AddChild( fPrefsView );
++
++    /* Create a scrollable outline view for the preferences tree */
++    rect = Bounds();
++    rect.InsetBy( 10, 10 );
++    rect.right = rect.left + 170;
++    fOutline = new BOutlineListView( rect, "preferences tree",
++                                     B_SINGLE_SELECTION_LIST,
++                                     B_FOLLOW_LEFT | B_FOLLOW_TOP_BOTTOM );
++    BScrollView * scrollview =
++        new BScrollView( "scrollview", fOutline,
++                         B_FOLLOW_LEFT | B_FOLLOW_TOP_BOTTOM,
++                         0, false, true );
++    fPrefsView->AddChild( scrollview );
++
++    /* We need to be informed if the user selects an item */
++    fOutline->SetSelectionMessage( new BMessage( PREFS_ITEM_SELECTED ) );
++
++    /* Create a dummy, empty view so we can correctly place the real
++       config views later */
++    rect.bottom -= 40;
++    rect.left = rect.right + 15 + B_V_SCROLL_BAR_WIDTH;
++    rect.right = Bounds().right - 15;
++    fDummyView = new BView( rect, "", B_FOLLOW_ALL_SIDES, B_WILL_DRAW );
++    fDummyView->SetViewUIColor( B_PANEL_BACKGROUND_COLOR );
++    fPrefsView->AddChild( fDummyView );
++
++    /* Build the category tree from the core module */
++    ConfigItem * catItem = NULL, * subcatItem, * otherItem;
++    unsigned confsize;
++    module_config_t * p_config = module_config_get( module_get_main(), &confsize );
++
++    for( unsigned i = 0; i < confsize; i++ )
++    {
++        const module_config_t * p_item = p_config + i;
++
++        switch( p_item->i_type )
++        {
++            case CONFIG_CATEGORY:
++                if( p_item->value.i == -1 )
++                    break;
++                catItem = new ConfigItem( p_intf,
++                    config_CategoryNameGet( p_item->value.i ),
++                    TYPE_CATEGORY, p_item->value.i, NULL,
++                    config_CategoryHelpGet( p_item->value.i ) );
++                fOutline->AddItem( catItem );
++                break;
++
++            case CONFIG_SUBCATEGORY:
++                if( p_item->value.i == -1 )
++                    break;
++                if( !catItem )
++                {
++                    msg_Warn( p_intf, "subcategory without a category" );
++                    break;
++                }
++                if( IsGeneralSubcategory( p_item->value.i ) )
++                {
++                    catItem->SetGeneralSubcategory( p_item->value.i );
++                    break;
++                }
++                subcatItem = new ConfigItem( p_intf,
++                    config_CategoryNameGet( p_item->value.i ),
++                    TYPE_SUBCATEGORY, p_item->value.i, NULL,
++                    config_CategoryHelpGet( p_item->value.i ) );
++                fOutline->AddUnder( subcatItem, catItem );
++                break;
++        }
++    }
++    module_config_free( p_config );
++
++    /* Now parse all other modules */
++    size_t count;
++    module_t ** p_list = module_list_get( &count );
++
++    for( size_t i = 0; i < count; i++ )
++    {
++        module_t * p_module = p_list[i];
++        int category = -1, subcategory = -1;
++        bool options = false;
++
++        if( module_is_main( p_module ) )
++            continue;
++
++        p_config = module_config_get( p_module, &confsize );
++        for( unsigned j = 0; j < confsize; j++ )
++        {
++            const module_config_t * p_item = p_config + j;
++
++            if( p_item->i_type == CONFIG_CATEGORY )
++                category = p_item->value.i;
++            else if( p_item->i_type == CONFIG_SUBCATEGORY )
++                subcategory = p_item->value.i;
++            else if( CONFIG_ITEM( p_item->i_type ) )
++                options = true;
++
++            if( options && category >= 0 && subcategory >= 0 )
++                break;
++        }
++        module_config_free( p_config );
++
++        if( !options || category < 0 || subcategory < 0 )
++            continue;
++
++        catItem = NULL;
++        for( int j = 0; j < fOutline->CountItemsUnder( NULL, true ); j++ )
++        {
++            catItem = (ConfigItem*) fOutline->ItemUnderAt( NULL, true, j );
++            if( catItem->ObjectId() == category )
++                break;
++            catItem = NULL;
++        }
++        if( !catItem )
++            continue;
++
++        subcatItem = NULL;
++        for( int j = 0; j < fOutline->CountItemsUnder( catItem, true ); j++ )
++        {
++            subcatItem = (ConfigItem*) fOutline->ItemUnderAt( catItem, true, j );
++            if( subcatItem->Type() == TYPE_SUBCATEGORY
++             && subcatItem->ObjectId() == subcategory )
++                break;
++            subcatItem = NULL;
++        }
++        if( !subcatItem )
++            subcatItem = catItem;
++
++        otherItem = new ConfigItem( p_intf,
++            module_get_name( p_module, false ), TYPE_MODULE, 0,
++            module_get_object( p_module ), NULL );
++        fOutline->AddUnder( otherItem, subcatItem );
++    }
++    module_list_free( p_list );
++
++    /* Collapse the whole tree */
++    for( int i = 0; i < fOutline->FullListCountItems(); i++ )
++    {
++        otherItem = (ConfigItem *) fOutline->FullListItemAt( i );
++        fOutline->Collapse( otherItem );
++    }
++
++    /* Add the buttons */
++    BButton * button;
++    rect = Bounds();
++    rect.InsetBy( 10, 10 );
++    rect.left = rect.right - 80;
++    rect.top = rect.bottom - 25;
++    button = new BButton( rect, "", _("Apply"), new BMessage( PREFS_APPLY ),
++                          B_FOLLOW_RIGHT | B_FOLLOW_BOTTOM );
++    fPrefsView->AddChild( button );
++    rect.OffsetBy( -90, 0 );
++    button = new BButton( rect, "", _("Save"), new BMessage( PREFS_SAVE ),
++                          B_FOLLOW_RIGHT | B_FOLLOW_BOTTOM );
++    button->MakeDefault( true );
++    fPrefsView->AddChild( button );
++    rect.OffsetBy( -90, 0 );
++    button = new BButton( rect, "", _("Defaults"),
++                          new BMessage( PREFS_DEFAULTS ),
++                          B_FOLLOW_RIGHT | B_FOLLOW_BOTTOM );
++    fPrefsView->AddChild( button );
++
++    /* Select the first item */
++    fOutline->Select( 0 );
++
++    /* start window thread in hidden state */
++    Hide();
++    Show();
++}
++
++/*****************************************************************************
++ * PreferencesWindow::~PreferencesWindow
++ *****************************************************************************/
++PreferencesWindow::~PreferencesWindow()
++{
++    /* The panel on screen goes with the window; the items delete the
++     * others */
++    for( int i = 0; i < fOutline->FullListCountItems(); i++ )
++        delete (ConfigItem *) fOutline->FullListItemAt( i );
++}
++
++/*****************************************************************************
++ * PreferencesWindow::QuitRequested
++ *****************************************************************************/
++bool PreferencesWindow::QuitRequested()
++{
++    if( !IsHidden() )
++    {
++        Hide();
++    }
++    return false;
++}
++
++/*****************************************************************************
++ * PreferencesWindow::MessageReceived
++ *****************************************************************************/
++void PreferencesWindow::MessageReceived( BMessage * message )
++{
++    switch( message->what )
++    {
++        case PREFS_ITEM_SELECTED:
++            Update();
++            break;
++
++        case PREFS_DEFAULTS:
++        {
++            BAlert * alert = new BAlert( _("Defaults"),
++                _("Reset all settings to their default values?"),
++                _("Cancel"), _("Reset"), NULL, B_WIDTH_AS_USUAL,
++                B_WARNING_ALERT );
++            alert->SetShortcut( 0, B_ESCAPE );
++            if( alert->Go() == 1 )
++            {
++                config_ResetAll( VLC_OBJECT( p_intf ) );
++                config_SaveConfigFile( VLC_OBJECT( p_intf ) );
++                Apply( false );
++            }
++            break;
++        }
++
++        case PREFS_APPLY:
++            Apply( true );
++            break;
++
++        case PREFS_SAVE:
++            Apply( true );
++            config_SaveConfigFile( VLC_OBJECT( p_intf ) );
++            break;
++
++        default:
++            BWindow::MessageReceived( message );
++    }
++}
++
++/*****************************************************************************
++ * PreferencesWindow::FrameResized
++ *****************************************************************************/
++void PreferencesWindow::FrameResized( float width, float height )
++{
++    BWindow::FrameResized( width, height );
++    if( fCurrent )
++        fCurrent->UpdateScrollBar();
++}
++
++/*****************************************************************************
++ * PreferencesWindow::Update
++ *****************************************************************************/
++void PreferencesWindow::Update()
++{
++    /* Get the selected item, if any */
++    if( fOutline->CurrentSelection() < 0 )
++        return;
++
++    /* Detach the old box if any */
++    if( fCurrent )
++    {
++        fCurrent->ResetScroll();
++        fDummyView->RemoveChild( fCurrent->Box() );
++    }
++
++    /* Add the new one... */
++    fCurrent = (ConfigItem *)
++        fOutline->ItemAt( fOutline->CurrentSelection() );
++    fDummyView->AddChild( fCurrent->Box( fDummyView->Bounds() ) );
++
++    /* ...then resize it (we must resize it after it's attached or the
++       children don't get adjusted) */
++    fCurrent->Box()->ResizeTo( fDummyView->Bounds().Width(),
++                               fDummyView->Bounds().Height() );
++    fCurrent->UpdateScrollBar();
++}
++
++/*****************************************************************************
++ * PreferencesWindow::Apply
++ * Apply changes if doIt is true, revert them otherwise
++ *****************************************************************************/
++void PreferencesWindow::Apply( bool doIt )
++{
++    ConfigItem * item;
++
++    for( int i = 0; i < fOutline->FullListCountItems(); i++ )
++    {
++        item = (ConfigItem*) fOutline->FullListItemAt( i );
++        item->Apply( doIt );
++    }
++}
++
++/*****************************************************************************
++ * PreferencesWindow::ReallyQuit
++ *****************************************************************************/
++void PreferencesWindow::ReallyQuit()
++{
++    Lock();
++    Hide();
++    Quit();
++}
++
++/***********************************************************************
++ * ConfigItem::ConfigItem
++ **********************************************************************/
++ConfigItem::ConfigItem( intf_thread_t * _p_intf, const char * name,
++                        int type, int objectId, const char * module,
++                        const char * help )
++    : BStringItem( name ? _(name) : "" )
++{
++    p_intf     = _p_intf;
++    fType      = type;
++    fObjectId  = objectId;
++    fGeneralId = -1;
++    fModule    = module ? strdup( module ) : NULL;
++    fHelp      = help ? strdup( help ) : NULL;
++
++    fBox    = NULL;
++    fScroll = NULL;
++    fView   = NULL;
++}
++
++/***********************************************************************
++ * ConfigItem::~ConfigItem
++ **********************************************************************/
++ConfigItem::~ConfigItem()
++{
++    free( fModule );
++    free( fHelp );
++    if( fBox && !fBox->Parent() )
++        delete fBox;
++}
++
++/***********************************************************************
++ * ConfigItem::_AddWidgets: adds a control for each option, from the
++ * given subcategory only if subcategory >= 0
++ **********************************************************************/
++void ConfigItem::_AddWidgets( BRect & r, const module_config_t * conf,
++                              unsigned size, int subcategory )
++{
++    bool inside = subcategory < 0;
++
++    for( unsigned i = 0; i < size; i++ )
++    {
++        const module_config_t * p_item = conf + i;
++
++        if( p_item->i_type == CONFIG_CATEGORY
++         || p_item->i_type == CONFIG_SUBCATEGORY )
++        {
++            if( subcategory >= 0 )
++            {
++                if( p_item->i_type == CONFIG_SUBCATEGORY
++                 && p_item->value.i == subcategory )
++                    inside = true;
++                else if( inside )
++                    break;
++            }
++            continue;
++        }
++        if( !inside )
++            continue;
++
++        if( p_item->i_type == CONFIG_SECTION )
++        {
++            /* A heading for the options that follow */
++            BRect sr( r.left, r.top + 6, r.right, r.top + ROW_HEIGHT );
++            BStringView * section = new BStringView( sr, NULL,
++                p_item->psz_text ? _(p_item->psz_text) : "",
++                B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP );
++            section->SetFont( be_bold_font );
++            fView->AddChild( section );
++            r.top += ROW_HEIGHT;
++            continue;
++        }
++
++        ConfigWidget * widget = new ConfigWidget( p_intf, r, p_item );
++        if( !widget->InitCheck() )
++        {
++            delete widget;
++            continue;
++        }
++        fView->AddChild( widget );
++        widget->Apply( false );
++        r.top += widget->Bounds().Height() + 1;
++    }
++}
++
++/***********************************************************************
++ * ConfigItem::Box: builds the panel the first time it is needed
++ **********************************************************************/
++BBox * ConfigItem::Box( BRect frame )
++{
++    if( fBox )
++        return fBox;
++
++    /* Built at its final size, so that texts wrap at the right width */
++    BRect r( 0, 0, frame.Width(), frame.Height() );
++    fBox = new BBox( r, NULL, B_FOLLOW_ALL );
++    fBox->SetLabel( Text() );
++
++    r = BRect( 10, 20, fBox->Bounds().right - B_V_SCROLL_BAR_WIDTH - 10,
++               fBox->Bounds().bottom - 10 );
++    fView = new BView( r, NULL, B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP,
++                       B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE );
++    fView->SetViewUIColor( B_PANEL_BACKGROUND_COLOR );
++
++    r = fView->Bounds();
++    r.InsetBy( 10, 10 );
++
++    /* Categories and subcategories start with their description */
++    if( fHelp && *fHelp )
++    {
++        BRect tr( r.left, r.top, r.right, r.top + 60 );
++        BTextView * text = new BTextView( tr, NULL,
++            BRect( 0, 0, tr.Width(), tr.Height() ),
++            B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP, B_WILL_DRAW );
++        text->SetViewUIColor( B_PANEL_BACKGROUND_COLOR );
++        text->MakeEditable( false );
++        text->MakeSelectable( false );
++        text->SetWordWrap( true );
++        text->SetText( _(fHelp) );
++        fView->AddChild( text );
++        text->ResizeTo( tr.Width(), text->TextHeight( 0, text->TextLength() ) + 4 );
++        r.top += text->Bounds().Height() + 10;
++    }
++
++    unsigned confsize;
++    module_config_t * p_config;
++
++    switch( fType )
++    {
++        case TYPE_CATEGORY:
++            if( fGeneralId >= 0 )
++            {
++                p_config = module_config_get( module_get_main(), &confsize );
++                _AddWidgets( r, p_config, confsize, fGeneralId );
++                module_config_free( p_config );
++            }
++            break;
++
++        case TYPE_SUBCATEGORY:
++            p_config = module_config_get( module_get_main(), &confsize );
++            _AddWidgets( r, p_config, confsize, fObjectId );
++            module_config_free( p_config );
++            break;
++
++        case TYPE_MODULE:
++        {
++            module_t * p_module = module_find( fModule );
++            if( p_module )
++            {
++                const char * psz_help = module_get_help( p_module );
++                if( psz_help && *psz_help )
++                {
++                    BRect tr( r.left, r.top, r.right, r.top + 60 );
++                    BTextView * text = new BTextView( tr, NULL,
++                        BRect( 0, 0, tr.Width(), tr.Height() ),
++                        B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP, B_WILL_DRAW );
++                    text->SetViewUIColor( B_PANEL_BACKGROUND_COLOR );
++                    text->MakeEditable( false );
++                    text->MakeSelectable( false );
++                    text->SetText( module_gettext( p_module, psz_help ) );
++                    fView->AddChild( text );
++                    text->ResizeTo( tr.Width(),
++                        text->TextHeight( 0, text->TextLength() ) + 4 );
++                    r.top += text->Bounds().Height() + 10;
++                }
++                p_config = module_config_get( p_module, &confsize );
++                _AddWidgets( r, p_config, confsize, -1 );
++                module_config_free( p_config );
++            }
++            break;
++        }
++    }
++
++    /* Create a scroll view around our fView */
++    fScroll = new BScrollView( NULL, fView, B_FOLLOW_ALL, 0, false,
++                               true, B_FANCY_BORDER );
++    fScroll->SetViewUIColor( B_PANEL_BACKGROUND_COLOR );
++    fBox->AddChild( fScroll );
++
++    /* Adjust fView's height to the size it actually needs (we do this
++       only now so the BScrollView fits the BBox) */
++    fView->ResizeTo( fView->Bounds().Width(), r.top + 10 );
++
++    return fBox;
++}
++
++/*****************************************************************************
++ * ConfigItem::UpdateScrollBar
++ *****************************************************************************/
++void ConfigItem::UpdateScrollBar()
++{
++    /* We have to fix the scrollbar manually because it doesn't handle
++       correctly simple BViews */
++
++    if( !fScroll )
++    {
++        return;
++    }
++
++    /* Get the available BRect for display */
++    BRect display = fScroll->Bounds();
++    display.right -= B_V_SCROLL_BAR_WIDTH;
++
++    /* Fix the scrollbar */
++    BScrollBar * scrollBar;
++    BRect visible = display & fView->Bounds();
++    BRect total   = display | fView->Bounds();
++    scrollBar = fScroll->ScrollBar( B_VERTICAL );
++    long max = (long)( fView->Bounds().Height() - visible.Height() );
++    if( max < 0 ) max = 0;
++    scrollBar->SetRange( 0, max );
++    scrollBar->SetProportion( visible.Height() / total.Height() );
++    scrollBar->SetSteps( 10, 100 );
++
++    fScroll->Invalidate();
++    fView->Invalidate();
++}
++
++/*****************************************************************************
++ * ConfigItem::ResetScroll
++ *****************************************************************************/
++void ConfigItem::ResetScroll()
++{
++    if( !fScroll )
++    {
++        return;
++    }
++
++    fView->ScrollTo( 0, 0 );
++}
++
++/***********************************************************************
++ * ConfigItem::Apply
++ **********************************************************************/
++void ConfigItem::Apply( bool doIt )
++{
++    if( !fView )
++    {
++        return;
++    }
++
++    /* Call ConfigWidget::Apply for every option on the panel */
++    for( int i = 0; i < fView->CountChildren(); i++ )
++    {
++        ConfigWidget * widget = dynamic_cast<ConfigWidget*>( fView->ChildAt( i ) );
++        if( widget )
++            widget->Apply( doIt );
++    }
++}
++
++/***********************************************************************
++ * ConfigWidget::ConfigWidget
++ ***********************************************************************
++ * Builds a view with the right controls for the given config variable.
++ *  rect: the BRect where we place ourselves. All we care is its width
++ *    and its top coordinate, since we adapt our height to take only
++ *    the place we need
++ **********************************************************************/
++ConfigWidget::ConfigWidget( intf_thread_t * _p_intf, BRect rect,
++                            const module_config_t * p_item )
++    : BView( rect, NULL, B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP,
++             B_WILL_DRAW | B_FRAME_EVENTS )
++{
++    p_intf = _p_intf;
++
++    SetViewUIColor( B_PANEL_BACKGROUND_COLOR );
++
++    fInitOK      = true;
++    fType        = p_item->i_type;
++    fName        = strdup( p_item->psz_name ? p_item->psz_name : "" );
++    fTextControl = NULL;
++    fCheckBox    = NULL;
++    fPopUpMenu   = NULL;
++    fMenuField   = NULL;
++
++    const char * psz_text = p_item->psz_text ? _(p_item->psz_text) : fName;
++    ResizeTo( Bounds().Width(), ROW_HEIGHT - 1 );
++
++    switch( fType )
++    {
++        case CONFIG_ITEM_BOOL:
++            fCheckBox = new BCheckBox( Bounds(), NULL, psz_text,
++                new BMessage(), B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP );
++            AddChild( fCheckBox );
++            break;
++
++        case CONFIG_ITEM_KEY:
++            /* Global hotkeys need a module Haiku doesn't have */
++            if( !strncmp( fName, "global-", 7 ) )
++            {
++                fInitOK = false;
++                break;
++            }
++            /* fall through */
++        case CONFIG_ITEM_MODULE:
++        case CONFIG_ITEM_MODULE_CAT:
++        case CONFIG_ITEM_MODULE_LIST:
++        case CONFIG_ITEM_MODULE_LIST_CAT:
++        case CONFIG_ITEM_STRING:
++        case CONFIG_ITEM_PASSWORD:
++        case CONFIG_ITEM_LOADFILE:
++        case CONFIG_ITEM_SAVEFILE:
++        case CONFIG_ITEM_DIRECTORY:
++        case CONFIG_ITEM_FONT:
++        case CONFIG_ITEM_INTEGER:
++        case CONFIG_ITEM_RGB:
++        case CONFIG_ITEM_FLOAT:
++            _BuildMenu( p_item );
++            if( fPopUpMenu )
++            {
++                fMenuField = new BMenuField( Bounds(), NULL, psz_text,
++                    fPopUpMenu, B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP );
++                fMenuField->SetDivider( Bounds().Width() / 2 );
++                AddChild( fMenuField );
++            }
++            else
++            {
++                fTextControl = new BTextControl( Bounds(), NULL, psz_text,
++                    NULL, new BMessage(), B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP );
++                fTextControl->SetDivider( Bounds().Width() / 2 );
++                if( fType == CONFIG_ITEM_PASSWORD )
++                    fTextControl->TextView()->HideTyping( true );
++                AddChild( fTextControl );
++            }
++            break;
++
++        default:
++            fInitOK = false;
++            break;
++    }
++
++    if( fInitOK && p_item->psz_longtext )
++        SetToolTip( _(p_item->psz_longtext) );
++}
++
++ConfigWidget::~ConfigWidget()
++{
++    free( fName );
++}
++
++/* Labels take the left half, controls the right half */
++void ConfigWidget::FrameResized( float width, float height )
++{
++    BView::FrameResized( width, height );
++    if( fTextControl )
++        fTextControl->SetDivider( width / 2 );
++    if( fMenuField )
++        fMenuField->SetDivider( width / 2 );
++}
++
++/***********************************************************************
++ * ConfigWidget::_BuildMenu: a pop-up menu for options with a fixed
++ * set of values; none for the others
++ **********************************************************************/
++void ConfigWidget::_BuildMenu( const module_config_t * p_item )
++{
++    vlc_object_t * obj = VLC_OBJECT( p_intf );
++
++    if( fType == CONFIG_ITEM_MODULE_CAT )
++    {
++        /* Modules of the subcategory stored in min */
++        fPopUpMenu = new BPopUpMenu( "" );
++        BMessage * msg = new BMessage();
++        msg->AddString( "value", "" );
++        fPopUpMenu->AddItem( new BMenuItem( _("Default"), msg ) );
++
++        size_t count;
++        module_t ** p_list = module_list_get( &count );
++        for( size_t i = 0; i < count; i++ )
++        {
++            if( module_is_main( p_list[i] ) )
++                continue;
++            unsigned confsize;
++            module_config_t * p_config = module_config_get( p_list[i], &confsize );
++            for( unsigned j = 0; j < confsize; j++ )
++            {
++                if( p_config[j].i_type == CONFIG_SUBCATEGORY
++                 && p_config[j].value.i == p_item->min.i )
++                {
++                    msg = new BMessage();
++                    msg->AddString( "value", module_get_object( p_list[i] ) );
++                    fPopUpMenu->AddItem( new BMenuItem(
++                        module_get_name( p_list[i], true ), msg ) );
++                    break;
++                }
++            }
++            module_config_free( p_config );
++        }
++        module_list_free( p_list );
++        return;
++    }
++
++    if( fType == CONFIG_ITEM_INTEGER )
++    {
++        int64_t * values;
++        char ** texts;
++        ssize_t count = config_GetIntChoices( obj, fName, &values, &texts );
++        if( count <= 0 )
++            return;
++        fPopUpMenu = new BPopUpMenu( "" );
++        for( ssize_t i = 0; i < count; i++ )
++        {
++            BMessage * msg = new BMessage();
++            msg->AddInt64( "value", values[i] );
++            fPopUpMenu->AddItem( new BMenuItem(
++                texts[i] ? _(texts[i]) : "", msg ) );
++            free( texts[i] );
++        }
++        free( values );
++        free( texts );
++        return;
++    }
++
++    if( fType == CONFIG_ITEM_MODULE || fType == CONFIG_ITEM_STRING )
++    {
++        char ** values;
++        char ** texts;
++        ssize_t count = config_GetPszChoices( obj, fName, &values, &texts );
++        if( count <= 0 )
++            return;
++        fPopUpMenu = new BPopUpMenu( "" );
++        for( ssize_t i = 0; i < count; i++ )
++        {
++            BMessage * msg = new BMessage();
++            msg->AddString( "value", values[i] ? values[i] : "" );
++            const char * psz_label = texts[i] && *texts[i] ? texts[i]
++                                   : ( values[i] ? values[i] : "" );
++            fPopUpMenu->AddItem( new BMenuItem( _(psz_label), msg ) );
++            free( values[i] );
++            free( texts[i] );
++        }
++        free( values );
++        free( texts );
++    }
++}
++
++/***********************************************************************
++ * ConfigWidget::Apply
++ **********************************************************************/
++void ConfigWidget::Apply( bool doIt )
++{
++    vlc_object_t * obj = VLC_OBJECT( p_intf );
++    char string[64];
++
++    if( fCheckBox )
++    {
++        if( doIt )
++            config_PutInt( obj, fName, fCheckBox->Value() ? 1 : 0 );
++        else
++            fCheckBox->SetValue( config_GetInt( obj, fName ) ? B_CONTROL_ON
++                                                             : B_CONTROL_OFF );
++        return;
++    }
++
++    if( fPopUpMenu )
++    {
++        if( doIt )
++        {
++            BMenuItem * item = fPopUpMenu->FindMarked();
++            if( !item )
++                return;
++            BMessage * msg = item->Message();
++            if( fType == CONFIG_ITEM_INTEGER )
++                config_PutInt( obj, fName, msg->GetInt64( "value", 0 ) );
++            else
++            {
++                const char * psz = msg->GetString( "value", "" );
++                config_PutPsz( obj, fName, *psz ? psz : NULL );
++            }
++            return;
++        }
++
++        /* Mark the item with the current value */
++        BMenuItem * match = NULL;
++        if( fType == CONFIG_ITEM_INTEGER )
++        {
++            int64_t value = config_GetInt( obj, fName );
++            for( int32 i = 0; i < fPopUpMenu->CountItems(); i++ )
++                if( fPopUpMenu->ItemAt( i )->Message()->GetInt64( "value", 0 ) == value )
++                    match = fPopUpMenu->ItemAt( i );
++        }
++        else
++        {
++            char * psz = config_GetPsz( obj, fName );
++            const char * value = psz ? psz : "";
++            for( int32 i = 0; i < fPopUpMenu->CountItems(); i++ )
++                if( !strcmp( fPopUpMenu->ItemAt( i )->Message()->GetString( "value", "" ),
++                             value ) )
++                    match = fPopUpMenu->ItemAt( i );
++            /* No module chosen: that's "any" in module lists */
++            if( !match && !*value )
++                for( int32 i = 0; i < fPopUpMenu->CountItems(); i++ )
++                    if( !strcmp( fPopUpMenu->ItemAt( i )->Message()->GetString( "value", "" ),
++                                 "any" ) )
++                        match = fPopUpMenu->ItemAt( i );
++            free( psz );
++        }
++        if( match )
++            match->SetMarked( true );
++        return;
++    }
++
++    if( !fTextControl )
++        return;
++
++    switch( fType )
++    {
++        case CONFIG_ITEM_INTEGER:
++            if( doIt )
++                config_PutInt( obj, fName, strtoll( fTextControl->Text(), NULL, 10 ) );
++            else
++            {
++                snprintf( string, sizeof( string ), "%" PRId64,
++                          config_GetInt( obj, fName ) );
++                fTextControl->SetText( string );
++            }
++            break;
++
++        case CONFIG_ITEM_RGB:
++            if( doIt )
++                config_PutInt( obj, fName, strtoll( fTextControl->Text(), NULL, 16 ) );
++            else
++            {
++                snprintf( string, sizeof( string ), "%06" PRIX64,
++                          config_GetInt( obj, fName ) );
++                fTextControl->SetText( string );
++            }
++            break;
++
++        case CONFIG_ITEM_FLOAT:
++            if( doIt )
++                config_PutFloat( obj, fName, us_atof( fTextControl->Text() ) );
++            else
++            {
++                snprintf( string, sizeof( string ), "%g",
++                          config_GetFloat( obj, fName ) );
++                fTextControl->SetText( string );
++            }
++            break;
++
++        default:
++            if( doIt )
++            {
++                const char * psz = fTextControl->Text();
++                config_PutPsz( obj, fName, *psz ? psz : NULL );
++            }
++            else
++            {
++                char * psz = config_GetPsz( obj, fName );
++                fTextControl->SetText( psz ? psz : "" );
++                free( psz );
++            }
++            break;
++    }
++}
+diff --git a/modules/gui/haiku/PreferencesWindow.h b/modules/gui/haiku/PreferencesWindow.h
+new file mode 100644
+index 0000000..2558157
+--- /dev/null
++++ b/modules/gui/haiku/PreferencesWindow.h
+@@ -0,0 +1,126 @@
++/*****************************************************************************
++ * PreferencesWindow.h
++ *****************************************************************************
++ * Copyright (C) 1999, 2000, 2001 the VideoLAN team
++ * Copyright (C) 2026 VLC authors and VideoLAN
++ *
++ * Authors: Eric Petit <titer@m0k.org>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
++ *****************************************************************************/
++
++#ifndef HAIKU_PREFERENCES_WINDOW_H
++#define HAIKU_PREFERENCES_WINDOW_H
++
++#include <InterfaceKit.h>
++
++#define PREFS_WINDOW_WIDTH   700
++#define PREFS_WINDOW_HEIGHT  400
++#define PREFS_ITEM_SELECTED  'pris'
++#define PREFS_DEFAULTS       'prde'
++#define PREFS_APPLY          'prap'
++#define PREFS_SAVE           'prsa'
++
++/* One option: a label and the control that fits its type */
++class ConfigWidget : public BView
++{
++    public:
++                        ConfigWidget( intf_thread_t * p_intf, BRect rect,
++                                      const module_config_t * p_item );
++                        ~ConfigWidget();
++        bool            InitCheck() { return fInitOK; }
++        virtual void    FrameResized( float width, float height );
++        /* Stores the control's value if doIt, shows the current one
++         * otherwise */
++        void            Apply( bool doIt );
++
++    private:
++        void            _BuildMenu( const module_config_t * p_item );
++
++        intf_thread_t * p_intf;
++
++        bool            fInitOK;
++        int             fType;
++        char          * fName;
++
++        BTextControl  * fTextControl;
++        BCheckBox     * fCheckBox;
++        BPopUpMenu    * fPopUpMenu;
++        BMenuField    * fMenuField;
++};
++
++/* An entry of the tree: a category, a subcategory or a plugin. Its panel
++ * is built the first time it is shown. */
++class ConfigItem : public BStringItem
++{
++    public:
++                      ConfigItem( intf_thread_t * p_intf,
++                                  const char * name, int type,
++                                  int objectId, const char * module,
++                                  const char * help );
++                      ~ConfigItem();
++        int           Type() { return fType; }
++        int           ObjectId() { return fObjectId; }
++        void          SetGeneralSubcategory( int id ) { fGeneralId = id; }
++        BBox        * Box( BRect frame = BRect( 0, 0, 100, 100 ) );
++        bool          HasBox() { return fBox != NULL; }
++        void          UpdateScrollBar();
++        void          ResetScroll();
++        void          Apply( bool doIt );
++
++    private:
++        void          _AddWidgets( BRect & r, const module_config_t * conf,
++                                   unsigned size, int subcategory );
++
++        intf_thread_t * p_intf;
++
++        int             fType;
++        int             fObjectId;
++        int             fGeneralId;
++        char          * fModule;
++        char          * fHelp;
++
++        BBox          * fBox;
++        BScrollView   * fScroll;
++        BView         * fView;
++};
++
++class PreferencesWindow : public BWindow
++{
++  public:
++                            PreferencesWindow( intf_thread_t * p_intf,
++                                               BRect frame,
++                                               const char * name );
++    virtual                 ~PreferencesWindow();
++
++    virtual bool            QuitRequested();
++    virtual void            MessageReceived(BMessage* message);
++    virtual void            FrameResized( float, float );
++
++            void            Update();
++            void            Apply( bool doIt );
++
++            void            ReallyQuit();
++
++  private:
++    BView                 * fPrefsView;
++    BOutlineListView      * fOutline;
++    BView                 * fDummyView;
++    ConfigItem            * fCurrent;
++
++    intf_thread_t         * p_intf;
++};
++
++#endif    // HAIKU_PREFERENCES_WINDOW_H
+-- 
+2.56.0
+
+
+From fb99bbc4558482ed9729b4e5010118fd3ec2c5bf Mon Sep 17 00:00:00 2001
+From: idumych <idumych@gmail.com>
+Date: Sat, 24 Oct 2026 17:18:44 -0700
+Subject: [PATCH 4/6] Haiku API on Linux: --enable-haiku-api for VitruvianOS
+ and Cosmoe
+
+The interface, the BBitmap video output and the BApplication helper
+now build wherever the Haiku API is available, not only on Haiku:
+
+* configure: --enable-haiku-api (on by default on Haiku) with
+  HAIKU_API_CFLAGS and HAIKU_API_LIBS, defining VLC_HAIKU_API.
+* The core's display fullscreen/window-state path is selected by
+  VLC_HAIKU_API instead of __HAIKU__; vlc_vout_display.h still turns it
+  on by itself on Haiku so outside plugins see the same structures.
+* libvlccore gets haiku/application.cpp with the Haiku API, and stubs
+  for vlc_haiku_app_* otherwise.
+* The disc menu is Haiku only (it uses Haiku device ioctls).
+* video_output/haiku: outside Haiku, frames are drawn by Draw() after
+  an Invalidate(); Cosmoe doesn't show drawing done from other threads.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ configure.ac                          | 23 ++++++++++++++
+ include/vlc_vout_display.h            | 15 ++++++---
+ include/vlc_vout_wrapper.h            |  2 +-
+ modules/gui/Makefile.am               |  5 +--
+ modules/gui/haiku/InterfaceWindow.cpp |  6 ++++
+ modules/video_output/Makefile.am      |  5 +--
+ modules/video_output/haiku.cpp        |  8 +++++
+ src/Makefile.am                       | 11 +++++--
+ src/misc/haiku_stub.c                 | 45 +++++++++++++++++++++++++++
+ src/video_output/display.c            | 18 +++++------
+ src/video_output/video_output.c       | 10 +++---
+ 11 files changed, 123 insertions(+), 25 deletions(-)
+ create mode 100644 src/misc/haiku_stub.c
+
+diff --git a/configure.ac b/configure.ac
+index 459b63a..8124cc3 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -407,6 +407,29 @@ AM_CONDITIONAL(HAVE_LINUX,   test "${SYS}" = "linux")
+ AM_CONDITIONAL(HAVE_OS2,     test "${SYS}" = "os2")
+ AM_CONDITIONAL(HAVE_HAIKU,     test "${SYS}" = "haiku")
+ 
++dnl
++dnl  Haiku API: the native interface and video output, on Haiku and on
++dnl  systems that provide the Haiku API (VitruvianOS, Cosmoe)
++dnl
++AC_ARG_ENABLE([haiku-api],
++  AS_HELP_STRING([--enable-haiku-api],
++    [Haiku interface and BBitmap video output (default enabled on Haiku)]),, [
++  AS_IF([test "${SYS}" = "haiku"], [enable_haiku_api="yes"], [enable_haiku_api="no"])
++])
++AC_ARG_VAR([HAIKU_API_CFLAGS], [C++ flags for the Haiku API headers])
++AC_ARG_VAR([HAIKU_API_LIBS], [linker flags for the Haiku API libraries])
++AS_IF([test "${enable_haiku_api}" = "yes"], [
++  AS_IF([test -z "${HAIKU_API_LIBS}"], [
++    AS_IF([test "${SYS}" = "haiku"], [
++      HAIKU_API_LIBS="-lbe"
++    ], [
++      AC_MSG_ERROR([Set HAIKU_API_CFLAGS and HAIKU_API_LIBS to use the Haiku API (VitruvianOS SDK or Cosmoe).])
++    ])
++  ])
++  AC_DEFINE([VLC_HAIKU_API], 1, [Define to 1 to build the Haiku API interface and video output.])
++])
++AM_CONDITIONAL([HAVE_HAIKU_API], [test "${enable_haiku_api}" = "yes"])
++
+ AM_CONDITIONAL(HAVE_DARWIN,  test "${SYS}" = "darwin")
+ AM_CONDITIONAL(HAVE_IOS,     test "${HAVE_IOS}" = "1")
+ AM_CONDITIONAL(HAVE_OSX,     test "${HAVE_OSX}" = "1")
+diff --git a/include/vlc_vout_display.h b/include/vlc_vout_display.h
+index b96e287..7a668c8 100644
+--- a/include/vlc_vout_display.h
++++ b/include/vlc_vout_display.h
+@@ -24,6 +24,13 @@
+ #ifndef VLC_VOUT_DISPLAY_H
+ #define VLC_VOUT_DISPLAY_H 1
+ 
++/* Haiku and the Haiku API (VitruvianOS, Cosmoe) use the display's own
++ * fullscreen and window-state controls; on Haiku this is always on, so
++ * that plugins built outside VLC see the same structures */
++#if defined(__HAIKU__) && !defined(VLC_HAIKU_API)
++# define VLC_HAIKU_API 1
++#endif
++
+ #include <vlc_es.h>
+ #include <vlc_picture.h>
+ #include <vlc_picture_pool.h>
+@@ -81,7 +88,7 @@ enum {
+  * Initial/Current configuration for a vout_display_t
+  */
+ typedef struct {
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     bool is_fullscreen VLC_DEPRECATED;  /* Is the display fullscreen */
+ #endif
+ 
+@@ -148,7 +155,7 @@ enum {
+      */
+     VOUT_DISPLAY_RESET_PICTURES,
+ 
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     /* Ask the module to acknowledge/refuse the fullscreen state change after
+      * being requested (externally or by VOUT_DISPLAY_EVENT_FULLSCREEN */
+     VOUT_DISPLAY_CHANGE_FULLSCREEN VLC_DEPRECATED_ENUM,     /* bool fs */
+@@ -196,7 +203,7 @@ enum {
+     /* */
+     VOUT_DISPLAY_EVENT_PICTURES_INVALID,    /* The buffer are now invalid and need to be changed */
+ 
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     VOUT_DISPLAY_EVENT_FULLSCREEN,
+     VOUT_DISPLAY_EVENT_WINDOW_STATE,
+ #endif
+@@ -369,7 +376,7 @@ static inline void vout_display_SendEventKey(vout_display_t *vd, int key)
+ {
+     vout_display_SendEvent(vd, VOUT_DISPLAY_EVENT_KEY, key);
+ }
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+ static inline void vout_display_SendEventFullscreen(vout_display_t *vd, bool is_fullscreen,
+                                                     bool is_window_fullscreen)
+ {
+diff --git a/include/vlc_vout_wrapper.h b/include/vlc_vout_wrapper.h
+index 12ee19d..019b34e 100644
+--- a/include/vlc_vout_wrapper.h
++++ b/include/vlc_vout_wrapper.h
+@@ -62,7 +62,7 @@ static inline void vout_display_Display(vout_display_t *vd,
+  */
+ typedef struct {
+     vout_display_cfg_t cfg;
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     unsigned wm_state;
+ #endif
+     vlc_rational_t sar;
+diff --git a/modules/gui/Makefile.am b/modules/gui/Makefile.am
+index 3f23fd5..5c2b0b1 100644
+--- a/modules/gui/Makefile.am
++++ b/modules/gui/Makefile.am
+@@ -31,8 +31,9 @@ libhaiku_plugin_la_SOURCES = \
+ 	gui/haiku/PlayListWindow.cpp gui/haiku/PlayListWindow.h \
+ 	gui/haiku/PreferencesWindow.cpp gui/haiku/PreferencesWindow.h \
+ 	gui/haiku/TransportButton.cpp gui/haiku/TransportButton.h
+-libhaiku_plugin_la_LIBADD = -lbe -ltracker
+-if HAVE_HAIKU
++libhaiku_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) $(HAIKU_API_CFLAGS)
++libhaiku_plugin_la_LIBADD = $(HAIKU_API_LIBS) -ltracker
++if HAVE_HAIKU_API
+ gui_LTLIBRARIES += libhaiku_plugin.la
+ endif
+ 
+diff --git a/modules/gui/haiku/InterfaceWindow.cpp b/modules/gui/haiku/InterfaceWindow.cpp
+index b702c9c..531a127 100644
+--- a/modules/gui/haiku/InterfaceWindow.cpp
++++ b/modules/gui/haiku/InterfaceWindow.cpp
+@@ -31,10 +31,12 @@
+ #include <AppKit.h>
+ #include <StorageKit.h>
+ #include <SupportKit.h>
++#ifdef __HAIKU__
+ #include <Drivers.h>
+ #include <fs_info.h>
+ #include <fcntl.h>
+ #include <unistd.h>
++#endif
+ 
+ /* VLC headers */
+ #ifdef HAVE_CONFIG_H
+@@ -107,6 +109,7 @@ make_sure_frame_is_within_limits( BRect& frame, float minWidth, float minHeight,
+         frame.bottom = frame.top + maxHeight;
+ }
+ 
++#ifdef __HAIKU__
+ // get_volume_info
+ bool
+ get_volume_info( BVolume& volume, BString& volumeName, bool& isCDROM, BString& deviceName )
+@@ -140,6 +143,7 @@ get_volume_info( BVolume& volume, BString& volumeName, bool& isCDROM, BString& d
+      }
+      return success;
+ }
++#endif
+ 
+ /* Playlist callbacks run on other threads: just poke the window */
+ static int PlaylistChanged( vlc_object_t *p_this, const char * psz_variable,
+@@ -1124,6 +1128,7 @@ void CDMenu::AttachedToWindow(void)
+ int CDMenu::GetCD()
+ {
+     int i_count = 0;
++#ifdef __HAIKU__
+     BVolumeRoster volRoster;
+     BVolume vol;
+     status_t status = volRoster.GetNextVolume( &vol );
+@@ -1144,6 +1149,7 @@ int CDMenu::GetCD()
+         vol.Unset();
+         status = volRoster.GetNextVolume( &vol );
+     }
++#endif
+     return i_count;
+ }
+ 
+diff --git a/modules/video_output/Makefile.am b/modules/video_output/Makefile.am
+index 29b959f..39a66fe 100644
+--- a/modules/video_output/Makefile.am
++++ b/modules/video_output/Makefile.am
+@@ -381,8 +381,9 @@ endif
+ 
+ ### HAIKU ###
+ libhaiku_vout_plugin_la_SOURCES = video_output/haiku.cpp
+-libhaiku_vout_plugin_la_LIBADD = -lbe
+-if HAVE_HAIKU
++libhaiku_vout_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) $(HAIKU_API_CFLAGS)
++libhaiku_vout_plugin_la_LIBADD = $(HAIKU_API_LIBS)
++if HAVE_HAIKU_API
+ vout_LTLIBRARIES += libhaiku_vout_plugin.la
+ endif
+ 
+diff --git a/modules/video_output/haiku.cpp b/modules/video_output/haiku.cpp
+index b2131d2..8358dce 100644
+--- a/modules/video_output/haiku.cpp
++++ b/modules/video_output/haiku.cpp
+@@ -568,8 +568,16 @@ static void Display(vout_display_t *vd, picture_t *picture,
+     vlc_mutex_unlock(&sys->lock);
+ 
+     if (sys->view->LockLooperWithTimeout(100000) == B_OK) {
++#ifdef __HAIKU__
++        /* Draw now and wait for app_server, so that frames don't pile up */
+         sys->view->DrawFrame(picture->p_sys->bitmap, source, place, filter);
+         sys->view->Sync();
++#else
++        /* Cosmoe and VitruvianOS only show what Draw() paints: ask for a
++         * redraw of the picture, which stays held until the next one */
++        sys->view->Invalidate();
++        VLC_UNUSED(source); VLC_UNUSED(place); VLC_UNUSED(filter);
++#endif
+         sys->view->UnlockLooper();
+     }
+ 
+diff --git a/src/Makefile.am b/src/Makefile.am
+index 4831f17..2110d82 100644
+--- a/src/Makefile.am
++++ b/src/Makefile.am
+@@ -414,14 +414,13 @@ libvlccore_la_SOURCES += \
+ else
+ if HAVE_HAIKU
+ libvlccore_la_SOURCES += \
+-	haiku/application.cpp \
+ 	haiku/dirs.cpp \
+ 	haiku/specific.c \
+ 	posix/error.c \
+ 	posix/netconf.c \
+ 	posix/getaddrinfo.c \
+ 	posix/thread.c
+-libvlccore_la_LIBADD += -lgnu -lnetwork -lbe
++libvlccore_la_LIBADD += -lgnu -lnetwork
+ else
+ if HAVE_DARWIN
+ libvlccore_la_SOURCES += \
+@@ -477,6 +476,14 @@ AM_CFLAGS += $(GCRYPT_CFLAGS)
+ libvlccore_la_LIBADD += $(GCRYPT_LIBS)
+ endif
+ 
++if HAVE_HAIKU_API
++libvlccore_la_SOURCES += haiku/application.cpp
++libvlccore_la_CXXFLAGS = $(AM_CXXFLAGS) $(HAIKU_API_CFLAGS)
++libvlccore_la_LIBADD += $(HAIKU_API_LIBS)
++else
++libvlccore_la_SOURCES += misc/haiku_stub.c
++endif
++
+ libvlccore_la_LDFLAGS = \
+ 	$(LDFLAGS_libvlccore) \
+ 	-no-undefined \
+diff --git a/src/misc/haiku_stub.c b/src/misc/haiku_stub.c
+new file mode 100644
+index 0000000..6456869
+--- /dev/null
++++ b/src/misc/haiku_stub.c
+@@ -0,0 +1,45 @@
++/*****************************************************************************
++ * haiku_stub.c: Haiku application helpers when there is no Haiku API
++ *****************************************************************************
++ * Copyright (C) 2026 VLC authors and VideoLAN
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms of the GNU Lesser General Public License as published by
++ * the Free Software Foundation; either version 2.1 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software Foundation,
++ * Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
++ *****************************************************************************/
++
++#ifdef HAVE_CONFIG_H
++# include "config.h"
++#endif
++
++#include <vlc_common.h>
++#include <vlc_haiku.h>
++
++/* libvlccore exports these everywhere; without the Haiku API there is no
++ * application to hold */
++
++#undef vlc_haiku_app_Hold
++int vlc_haiku_app_Hold(vlc_object_t *obj)
++{
++    VLC_UNUSED(obj);
++    return VLC_EGENERIC;
++}
++
++void vlc_haiku_app_Release(void)
++{
++}
++
++void vlc_haiku_app_SetTarget(void *looper)
++{
++    VLC_UNUSED(looper);
++}
+diff --git a/src/video_output/display.c b/src/video_output/display.c
+index 268dda0..309b8a2 100644
+--- a/src/video_output/display.c
++++ b/src/video_output/display.c
+@@ -341,7 +341,7 @@ typedef struct {
+ 
+     bool ch_zoom;
+     vlc_rational_t zoom;
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     unsigned width_saved;
+     unsigned height_saved;
+     bool ch_fullscreen;
+@@ -600,7 +600,7 @@ static void VoutDisplayEvent(vout_display_t *vd, int event, va_list args)
+                                      va_arg(args, const vlc_viewpoint_t *));
+         break;
+ 
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     case VOUT_DISPLAY_EVENT_FULLSCREEN: {
+         const int is_fullscreen = (int)va_arg(args, int);
+         const bool window_fullscreen = va_arg(args, int);
+@@ -760,7 +760,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
+     for (;;) {
+ 
+         vlc_mutex_lock(&osys->lock);
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+         bool ch_fullscreen  = osys->ch_fullscreen;
+         bool is_fullscreen  = osys->is_fullscreen;
+         osys->ch_fullscreen = false;
+@@ -789,7 +789,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
+             !reset_pictures &&
+             osys->is_display_filled == osys->cfg.is_display_filled &&
+             !osys->ch_zoom &&
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+             !ch_fullscreen &&
+             !ch_wm_state &&
+ #endif
+@@ -806,7 +806,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
+         }
+ 
+         /* */
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+         if (ch_fullscreen) {
+             if (osys->window_fullscreen
+              || vout_display_Control(vd, VOUT_DISPLAY_CHANGE_FULLSCREEN,
+@@ -826,7 +826,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
+ 
+         /* */
+         if (ch_display_size) {
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+             osys->width_saved  = osys->cfg.display.width;
+             osys->height_saved = osys->cfg.display.height;
+ #endif
+@@ -852,7 +852,7 @@ bool vout_ManageDisplay(vout_display_t *vd, bool allow_reset_pictures)
+ 
+             vout_display_Control(vd, VOUT_DISPLAY_CHANGE_ZOOM, &osys->cfg);
+         }
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+         /* */
+         if (ch_wm_state) {
+             if (vout_display_Control(vd, VOUT_DISPLAY_CHANGE_WINDOW_STATE, wm_state)) {
+@@ -1154,7 +1154,7 @@ static vout_display_t *DisplayNew(vout_thread_t *vout,
+ 
+     osys->zoom.num = cfg->zoom.num;
+     osys->zoom.den = cfg->zoom.den;
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     osys->is_fullscreen  = cfg->is_fullscreen;
+     osys->width_saved    = cfg->display.width;
+     osys->height_saved   = cfg->display.height;
+@@ -1228,7 +1228,7 @@ void vout_DeleteDisplay(vout_display_t *vd, vout_display_state_t *state)
+     if (state) {
+         if (!osys->is_splitter)
+             state->cfg = osys->cfg;
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+         state->wm_state = osys->wm_state;
+ #endif
+         state->sar = osys->sar_initial;
+diff --git a/src/video_output/video_output.c b/src/video_output/video_output.c
+index a78671e..68ddc3a 100644
+--- a/src/video_output/video_output.c
++++ b/src/video_output/video_output.c
+@@ -570,7 +570,7 @@ void vout_ControlChangeViewpoint(vout_thread_t *vout,
+ static void VoutGetDisplayCfg(vout_thread_t *vout, vout_display_cfg_t *cfg, const char *title)
+ {
+     /* Load configuration */
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     cfg->is_fullscreen = var_GetBool(vout, "fullscreen")
+                          || var_GetBool(vout, "video-wallpaper");
+ #endif
+@@ -1363,7 +1363,7 @@ static void ThreadChangeFullscreen(vout_thread_t *vout, bool fullscreen)
+ {
+     vout_window_t *window = vout->p->window;
+ 
+-#if !defined(_WIN32) && !defined(__OS2__) && !defined(__HAIKU__)
++#if !defined(_WIN32) && !defined(__OS2__) && !defined(VLC_HAIKU_API)
+     if (window != NULL)
+         vout_window_SetFullScreen(window, fullscreen);
+ #else
+@@ -1383,7 +1383,7 @@ static void ThreadChangeWindowState(vout_thread_t *vout, unsigned state)
+ 
+     if (window != NULL)
+         vout_window_SetState(window, state);
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     else /* FIXME: remove this event */
+     if (vout->p->display.vd != NULL)
+         vout_display_SendWindowState(vout->p->display.vd, state);
+@@ -1516,7 +1516,7 @@ static int ThreadStart(vout_thread_t *vout, vout_display_state_t *state)
+     if (!state) {
+         VoutGetDisplayCfg(vout, &state_default.cfg, vout->p->display.title);
+ 
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+         bool below = var_InheritBool(vout, "video-wallpaper");
+         bool above = var_InheritBool(vout, "video-on-top");
+ 
+@@ -1645,7 +1645,7 @@ static int ThreadReinit(vout_thread_t *vout,
+ 
+     vout_ReinitInterlacingSupport(vout);
+ 
+-#if defined(_WIN32) || defined(__OS2__) || defined(__HAIKU__)
++#if defined(_WIN32) || defined(__OS2__) || defined(VLC_HAIKU_API)
+     if (!state.cfg.is_fullscreen)
+ #endif
+     {
+-- 
+2.56.0
+
+
+From 7907a7cfca00723d905ef52139609d6510d9bc80 Mon Sep 17 00:00:00 2001
+From: idumych <idumych@gmail.com>
+Date: Sat, 24 Oct 2026 17:29:05 -0700
+Subject: [PATCH 5/6] vlc: no global hotkeys interface with the Haiku API
+
+There is no global hotkeys module on Haiku, VitruvianOS or the Cosmoe
+builds (it needs X11), so asking for it only printed an error at
+every start.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bin/vlc.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/bin/vlc.c b/bin/vlc.c
+index 72e0eee..259afa0 100644
+--- a/bin/vlc.c
++++ b/bin/vlc.c
+@@ -238,7 +238,8 @@ int main( int i_argc, const char *ppsz_argv[] )
+     libvlc_set_user_agent (vlc, "VLC media player", "VLC/"PACKAGE_VERSION);
+ 
+     libvlc_add_intf (vlc, "hotkeys,none");
+-#if !defined (__OS2__)
++/* No global hotkeys module for OS/2 or the Haiku API (it needs X11) */
++#if !defined (__OS2__) && !defined (VLC_HAIKU_API)
+     libvlc_add_intf (vlc, "globalhotkeys,none");
+ #endif
+     if (libvlc_add_intf (vlc, NULL))
+-- 
+2.56.0
+
+
+From 2fb686199bff0a46dc70f89aa890a51961d52d22 Mon Sep 17 00:00:00 2001
+From: idumych <idumych@gmail.com>
+Date: Sat, 24 Oct 2026 18:18:58 -0700
+Subject: [PATCH 6/6] Haiku API: keep the plugins loaded and wait for windows
+ to go away
+
+On VitruvianOS, BWindow::Quit() called from another thread (and
+wait_for_thread()) can return while the window's thread still runs the
+destructor, and VLC then unloaded the plugin under it: VLC crashed on
+quit about one time in six. The interface and video output plugins now
+use cannot_unload_broken_library(), and their Close() functions wait
+until the window's port is gone. 32 starts and quits on VitruvianOS
+0.6.2 without a crash (before: 1 in 6).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ modules/gui/haiku/MessagesWindow.cpp    | 6 ++++++
+ modules/gui/haiku/PlayListWindow.cpp    | 6 ++++++
+ modules/gui/haiku/PreferencesWindow.cpp | 9 ++++++++-
+ modules/gui/haiku/haiku.cpp             | 8 ++++++++
+ modules/video_output/haiku.cpp          | 9 +++++++++
+ 5 files changed, 37 insertions(+), 1 deletion(-)
+
+diff --git a/modules/gui/haiku/MessagesWindow.cpp b/modules/gui/haiku/MessagesWindow.cpp
+index f7ebccb..9dbd1d9 100644
+--- a/modules/gui/haiku/MessagesWindow.cpp
++++ b/modules/gui/haiku/MessagesWindow.cpp
+@@ -211,7 +211,13 @@ void MessagesWindow::ReallyQuit()
+     if( fSubscribed )
+         vlc_LogSet( p_intf->obj.libvlc, NULL, NULL );
+ 
++    /* Wait until the window is gone: on VitruvianOS, Quit() from another
++     * thread (and wait_for_thread()) can return before it is */
++    BMessenger messenger( this );
+     Lock();
+     Hide();
+     Quit();
++    /* The looper's port goes away at the end of its destructor */
++    for( int i = 0; i < 200 && messenger.IsValid(); i++ )
++        snooze( 10000 );
+ }
+diff --git a/modules/gui/haiku/PlayListWindow.cpp b/modules/gui/haiku/PlayListWindow.cpp
+index b0b353b..94f6b39 100644
+--- a/modules/gui/haiku/PlayListWindow.cpp
++++ b/modules/gui/haiku/PlayListWindow.cpp
+@@ -212,9 +212,15 @@ PlayListWindow::MessageReceived( BMessage * p_message )
+ void
+ PlayListWindow::ReallyQuit()
+ {
++    /* Wait until the window is gone: on VitruvianOS, Quit() from another
++     * thread (and wait_for_thread()) can return before it is */
++    BMessenger messenger( this );
+     Lock();
+     Hide();
+     Quit();
++    /* The looper's port goes away at the end of its destructor */
++    for( int i = 0; i < 200 && messenger.IsValid(); i++ )
++        snooze( 10000 );
+ }
+ 
+ /*****************************************************************************
+diff --git a/modules/gui/haiku/PreferencesWindow.cpp b/modules/gui/haiku/PreferencesWindow.cpp
+index ccda4c4..26296f7 100644
+--- a/modules/gui/haiku/PreferencesWindow.cpp
++++ b/modules/gui/haiku/PreferencesWindow.cpp
+@@ -366,11 +366,18 @@ void PreferencesWindow::Apply( bool doIt )
+ /*****************************************************************************
+  * PreferencesWindow::ReallyQuit
+  *****************************************************************************/
+-void PreferencesWindow::ReallyQuit()
++void
++PreferencesWindow::ReallyQuit()
+ {
++    /* Wait until the window is gone: on VitruvianOS, Quit() from another
++     * thread (and wait_for_thread()) can return before it is */
++    BMessenger messenger( this );
+     Lock();
+     Hide();
+     Quit();
++    /* The looper's port goes away at the end of its destructor */
++    for( int i = 0; i < 200 && messenger.IsValid(); i++ )
++        snooze( 10000 );
+ }
+ 
+ /***********************************************************************
+diff --git a/modules/gui/haiku/haiku.cpp b/modules/gui/haiku/haiku.cpp
+index 6885bc8..d081724 100644
+--- a/modules/gui/haiku/haiku.cpp
++++ b/modules/gui/haiku/haiku.cpp
+@@ -60,6 +60,9 @@ vlc_module_begin ()
+     set_capability( "interface", 160 )
+     set_callbacks( Open, Close )
+     add_shortcut( "haiku", "beos" )
++    /* Window threads run this plugin's code until they are gone, which
++     * Quit() doesn't wait for everywhere (VitruvianOS) */
++    cannot_unload_broken_library()
+ vlc_module_end ()
+ 
+ struct intf_sys_t
+@@ -111,8 +114,13 @@ static void Close( vlc_object_t *p_this )
+ 
+     vlc_haiku_app_SetTarget( NULL );
+     p_window->Detach();
++    /* Wait until the window is gone: on VitruvianOS, Quit() from another
++     * thread (and wait_for_thread()) can return before it is */
++    BMessenger messenger( p_window );
+     if( p_window->Lock() )
+         p_window->Quit();
++    for( int i = 0; i < 200 && messenger.IsValid(); i++ )
++        snooze( 10000 );
+ 
+     free( p_intf->p_sys );
+     vlc_haiku_app_Release();
+diff --git a/modules/video_output/haiku.cpp b/modules/video_output/haiku.cpp
+index 8358dce..e3bc740 100644
+--- a/modules/video_output/haiku.cpp
++++ b/modules/video_output/haiku.cpp
+@@ -40,6 +40,7 @@
+ #include <Cursor.h>
+ #include <InterfaceDefs.h>
+ #include <Message.h>
++#include <Messenger.h>
+ #include <Screen.h>
+ #include <View.h>
+ #include <Window.h>
+@@ -64,6 +65,9 @@ vlc_module_begin ()
+     add_shortcut("haiku", "bbitmap")
+     add_obsolete_string("haiku-video-driver")
+     set_callbacks(Open, Close)
++    /* The window thread runs this plugin's code until it is gone, which
++     * Quit() doesn't wait for everywhere (VitruvianOS) */
++    cannot_unload_broken_library()
+ vlc_module_end ()
+ 
+ /* Messages from the vout thread to the window */
+@@ -737,8 +741,13 @@ static void Close(vlc_object_t *object)
+     vout_display_t *vd = (vout_display_t *)object;
+     vout_display_sys_t *sys = vd->sys;
+ 
++    /* Wait until the window is gone: on VitruvianOS, Quit() from another
++     * thread (and wait_for_thread()) can return before it is */
++    BMessenger messenger(sys->window);
+     if (sys->window->Lock())
+         sys->window->Quit();
++    for (int i = 0; i < 200 && messenger.IsValid(); i++)
++        snooze(10000);
+ 
+     if (sys->current != NULL)
+         picture_Release(sys->current);
 -- 
 2.56.0
 
