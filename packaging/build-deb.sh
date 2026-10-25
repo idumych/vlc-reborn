@@ -90,10 +90,12 @@ printf 'Source: vlc\n\nPackage: vlc\nArchitecture: any\n' > "$SHLIB/debian/contr
 ELFS=$(find "$PKG" -type f \( -name '*.so*' -o -perm -u+x \) -exec sh -c \
 	'head -c4 "$1" | grep -q ELF && echo "$1"' _ {} \;)
 # shellcheck disable=SC2086
-( cd "$SHLIB" && dpkg-shlibdeps -O --ignore-missing-info -l"$PKG$PREFIX/lib" \
+( cd "$SHLIB" && dpkg-shlibdeps -O --ignore-missing-info -l"$PKG$PREFIX/lib" -l"$PKG$PREFIX/lib/vlc" \
 	-xlibvlc5 -xlibvlccore9 $ELFS 2>"$BUILD/shlibdeps.log" ) \
 	| sed -n 's/^shlibs:Depends=//p' > "$BUILD/depends"
 grep -v -E 'libbe|libroot|libtracker' "$BUILD/shlibdeps.log" | grep -i -E 'error|warning: package' | head -5 || :
+[ -s "$BUILD/depends" ] || { echo "build-deb: dpkg-shlibdeps found no dependencies:" >&2
+	cat "$BUILD/shlibdeps.log" >&2; exit 1; }
 DEPENDS="$VOS_DEPENDS, $(cat "$BUILD/depends"), attr"
 
 mkdir -p "$PKG/DEBIAN"
