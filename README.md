@@ -30,6 +30,9 @@ to VLC 3.0.23, with no Qt, on three platforms:
   each video plays in its own window. Frames are decoded into BBitmaps
   and the window server scales them. Window ▸ Fullscreen fills the screen
   and Esc leaves it; VLC's keyboard shortcuts work in the video window.
+- **OpenGL video output** (“VideoLAN Client 3.0.23 (OpenGL output)”): the
+  same window, drawn with VLC's OpenGL renderer in a BGLView. Choose it in
+  Preferences ▸ Video ▸ Output modules, or with `--vout=haiku_gl`.
 - Menus: **File** (Open File, Open Disc, Open Location, Open Subtitles,
   About, Quit), **Audio** (audio track, subtitles, volume, mute),
   **Navigation** (previous/next file, title and chapter), **Speed**
@@ -128,7 +131,7 @@ out the packaging files).
 | Path | What |
 |---|---|
 | [`modules/gui/haiku/`](modules/gui/haiku) | The interface: VLC 0.8's BeOS interface (Tony Castley, Stephan Aßmus, Eric Petit and others) ported to VLC 3, with its preferences window |
-| [`modules/video_output/haiku.cpp`](modules/video_output/haiku.cpp) | BBitmap video output (`--vout=bbitmap`; `--no-haiku-vout-filter` turns smooth scaling off) |
+| [`modules/video_output/haiku.cpp`](modules/video_output/haiku.cpp) | BBitmap video output (`--vout=bbitmap`; `--no-haiku-vout-filter` turns smooth scaling off), and built again as the OpenGL output in a BGLView (`--vout=haiku_gl`) |
 | [`modules/audio_output/haiku.cpp`](modules/audio_output/haiku.cpp) | Media Kit audio output, Haiku only (HaikuPorts) |
 | [`src/haiku/application.cpp`](src/haiku/application.cpp) | The `BApplication` the plugins share; when LibVLC runs inside another Haiku app, that app's `be_app` is used |
 
@@ -139,17 +142,19 @@ out the packaging files).
   Esc, closing the video window, audio track menu, playlist, messages and
   preferences windows (changing and saving a setting), Open File panel,
   dropping files and folders from Tracker, “Open with…”, the Deskbar
-  launcher, quitting.
+  launcher, quitting, and playback with the OpenGL output (Mesa).
 - **VitruvianOS 0.6.2**, amd64, in VirtualBox: install with apt (signature
   and attributes restored, plugin cache made), playback with video and
-  sound (PipeWire), the Deskbar entry, and 32 starts and quits in a row.
+  sound (PipeWire), the OpenGL output (Mesa), the Deskbar entry, and 32
+  starts and quits in a row.
 - **Linux**: on Ubuntu 24.04 in CI, both AppImages start and draw their
   window under X11 (Xvfb) and Wayland (sway); the x86_64 AppImage played
-  a video under Xvfb.
+  a video under Xvfb, with the BBitmap and the OpenGL output (NVIDIA, EGL).
+  On a KDE Plasma (Wayland) laptop with two monitors: the preferences
+  window's pop-up menus.
 - Not tested: the arm64 .deb (VirtualBox can't run arm64 guests; it only
-  passed the static checks), playback on aarch64, real hardware, Renku OS,
-  interactive Wayland desktops, DVDs and other discs, subtitle files,
-  network streams.
+  passed the static checks), playback on aarch64, Renku OS, DVDs and other
+  discs, subtitle files, network streams.
 
 ## Known issues
 
