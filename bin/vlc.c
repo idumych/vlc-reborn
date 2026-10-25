@@ -238,7 +238,8 @@ int main( int i_argc, const char *ppsz_argv[] )
     libvlc_set_user_agent (vlc, "VLC media player", "VLC/"PACKAGE_VERSION);
 
     libvlc_add_intf (vlc, "hotkeys,none");
-#if !defined (__OS2__)
+/* No global hotkeys module for OS/2 or the Haiku API (it needs X11) */
+#if !defined (__OS2__) && !defined (VLC_HAIKU_API)
     libvlc_add_intf (vlc, "globalhotkeys,none");
 #endif
     if (libvlc_add_intf (vlc, NULL))
