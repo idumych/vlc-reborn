@@ -3201,6 +3201,12 @@ PKG_CHECK_MODULES([GL], [gl], [
   AC_MSG_RESULT([${have_gl}])
 ])
 AM_CONDITIONAL([HAVE_GL], [test "${have_gl}" = "yes"])
+
+dnl OpenGL output in a BGLView (Haiku API): libGL on Haiku; elsewhere the
+dnl library with BGLView must be named (VitruvianOS: -lopengl)
+AC_ARG_VAR([HAIKU_GL_LIBS], [linker flags for BGLView (default: -lGL on Haiku)])
+AS_IF([test "${SYS}" = "haiku" && test -z "${HAIKU_GL_LIBS}"], [HAIKU_GL_LIBS="-lGL"])
+AM_CONDITIONAL([HAVE_HAIKU_GL], [test "${enable_haiku_api}" = "yes" && test "${have_gl}" = "yes" && test -n "${HAIKU_GL_LIBS}"])
 AS_IF([test "${have_gl}" = "yes"], [
   AC_DEFINE([HAVE_GL], 1, [Defined if having OpenGL])
 ])

@@ -45,7 +45,18 @@
 #include <View.h>
 #include <Window.h>
 
-#define VOUT_HAIKU_TITLE "VideoLAN Client " VERSION " (BBitmap output)"
+/* Built twice: the BBitmap output, and with HAIKU_VOUT_GL the OpenGL output,
+ * which draws with VLC's OpenGL renderer into a BGLView in the same window */
+#ifdef HAIKU_VOUT_GL
+# include <dlfcn.h>
+# include <GLView.h>
+extern "C" {
+# include "opengl/vout_helper.h"
+}
+# define VOUT_HAIKU_TITLE "VideoLAN Client " VERSION " (OpenGL output)"
+#else
+# define VOUT_HAIKU_TITLE "VideoLAN Client " VERSION " (BBitmap output)"
+#endif
 
 static int  Open(vlc_object_t *);
 static void Close(vlc_object_t *);
@@ -55,15 +66,24 @@ static void Close(vlc_object_t *);
     "window size. Turn this off on slow machines.")
 
 vlc_module_begin ()
-    set_shortname("BBitmap")
     set_category(CAT_VIDEO)
     set_subcategory(SUBCAT_VIDEO_VOUT)
+#ifdef HAIKU_VOUT_GL
+    set_shortname("BGLView")
+    set_description(N_("Haiku OpenGL video output"))
+    /* Below BBitmap, which stays the default */
+    set_capability("vout display", 265)
+    add_shortcut("haiku_gl", "bglview")
+    add_glopts()
+#else
+    set_shortname("BBitmap")
     set_description(N_("Haiku BBitmap video output"))
     /* Above OpenGL (270): BBitmap is the default output on Haiku */
     set_capability("vout display", 280)
     add_bool("haiku-vout-filter", true, FILTER_TEXT, FILTER_LONGTEXT, true)
     add_shortcut("haiku", "bbitmap")
     add_obsolete_string("haiku-video-driver")
+#endif
     set_callbacks(Open, Close)
     /* The window thread runs this plugin's code until it is gone, which
      * Quit() doesn't wait for everywhere (VitruvianOS) */
@@ -92,11 +112,17 @@ struct vout_display_sys_t
     picture_pool_t *pool;
     VideoWindow    *window;
     VideoView      *view;
+#ifdef HAIKU_VOUT_GL
+    BGLView        *glview;
+    vlc_gl_t       *gl;
+    vout_display_opengl_t *vgl;
+#endif
 
     vlc_mutex_t     lock;       /* protects the fields below */
     picture_t      *current;    /* last displayed picture, held */
     BRect           source;     /* visible part of the picture */
     BRect           place;      /* where it goes in the view */
+    unsigned        display_height;
     bool            filter;
 };
 
@@ -210,12 +236,18 @@ public:
     {
         vout_display_sys_t *sys = vd->sys;
 
+#ifdef HAIKU_VOUT_GL
+        /* The OpenGL view covers it */
+        VLC_UNUSED(sys);
+#else
         vlc_mutex_lock(&sys->lock);
         DrawFrame(sys->current ? sys->current->p_sys->bitmap : NULL,
                   sys->source, sys->place, sys->filter);
         vlc_mutex_unlock(&sys->lock);
+#endif
     }
 
+#ifndef HAIKU_VOUT_GL
     void DrawFrame(BBitmap *bitmap, BRect source, BRect place, bool filter)
     {
         BRect b = Bounds();
@@ -237,6 +269,7 @@ public:
         DrawBitmap(bitmap, source, place,
                    filter ? B_FILTER_BITMAP_BILINEAR : 0);
     }
+#endif
 
     virtual void FrameResized(float width, float height)
     {
@@ -312,6 +345,8 @@ public:
     {
         if (!cursor_hidden && buttons == 0) {
             SetViewCursor(&empty_cursor);
+            for (int32 i = 0; ChildAt(i) != NULL; i++)
+                ChildAt(i)->SetViewCursor(&empty_cursor);
             cursor_hidden = true;
         }
     }
@@ -320,6 +355,8 @@ public:
     {
         if (cursor_hidden) {
             SetViewCursor(B_CURSOR_SYSTEM_DEFAULT);
+            for (int32 i = 0; ChildAt(i) != NULL; i++)
+                ChildAt(i)->SetViewCursor(B_CURSOR_SYSTEM_DEFAULT);
             cursor_hidden = false;
         }
     }
@@ -330,6 +367,32 @@ private:
     bool cursor_hidden;
     BCursor empty_cursor;
 };
+
+#ifdef HAIKU_VOUT_GL
+/*****************************************************************************
+ * VideoGLView: the OpenGL surface over the video view, which handles the
+ * mouse and keyboard as in the BBitmap output
+ *****************************************************************************/
+class VideoGLView : public BGLView
+{
+public:
+    VideoGLView(BRect frame, VideoView *events)
+        : BGLView(frame, "opengl", B_FOLLOW_ALL, 0, BGL_RGB | BGL_DOUBLE),
+          events(events)
+    {
+    }
+
+    virtual void MouseDown(BPoint where) { events->MouseDown(where); }
+    virtual void MouseUp(BPoint where) { events->MouseUp(where); }
+    virtual void MouseMoved(BPoint where, uint32 transit, const BMessage *msg)
+    {
+        events->MouseMoved(where, transit, msg);
+    }
+
+private:
+    VideoView *events;
+};
+#endif
 
 /*****************************************************************************
  * VideoWindow
@@ -344,11 +407,18 @@ public:
     {
         view = new VideoView(Bounds(), vd);
         AddChild(view);
+#ifdef HAIKU_VOUT_GL
+        glview = new VideoGLView(view->Bounds(), view);
+        view->AddChild(glview);
+#endif
         view->MakeFocus(true);
         SetSizeLimits(32, 30000, 32, 30000);
     }
 
     VideoView *View() const { return view; }
+#ifdef HAIKU_VOUT_GL
+    BGLView *GLView() const { return glview; }
+#endif
 
     virtual void MessageReceived(BMessage *msg)
     {
@@ -433,6 +503,9 @@ public:
 private:
     vout_display_t *vd;
     VideoView *view;
+#ifdef HAIKU_VOUT_GL
+    BGLView *glview;
+#endif
     BRect saved_frame;
     bool is_fullscreen;
     bool is_on_top;
@@ -448,6 +521,7 @@ static void UpdatePlace(vout_display_t *vd, const vout_display_cfg_t *cfg)
     vout_display_place_t place;
 
     vout_display_PlacePicture(&place, &vd->source, cfg, false);
+    sys->display_height = cfg->display.height;
     sys->place = BRect(place.x, place.y,
                        place.x + place.width - 1, place.y + place.height - 1);
 
@@ -461,6 +535,27 @@ static void UpdatePlace(vout_display_t *vd, const vout_display_cfg_t *cfg)
                             vd->fmt.i_y_offset + vd->fmt.i_visible_height - 1);
 }
 
+#ifdef HAIKU_VOUT_GL
+/* Applies the picture place to the OpenGL viewport; vout thread only */
+static void Redraw(vout_display_t *vd)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    vlc_mutex_lock(&sys->lock);
+    BRect place = sys->place;
+    int display_height = sys->display_height;
+    vlc_mutex_unlock(&sys->lock);
+
+    if (!place.IsValid() || vlc_gl_MakeCurrent(sys->gl) != VLC_SUCCESS)
+        return;
+    int width = place.IntegerWidth() + 1, height = place.IntegerHeight() + 1;
+    vout_display_opengl_SetWindowAspectRatio(sys->vgl, (float)width / height);
+    /* OpenGL counts y from the bottom */
+    vout_display_opengl_Viewport(sys->vgl, place.left,
+        display_height - (place.top + height), width, height);
+    vlc_gl_ReleaseCurrent(sys->gl);
+}
+#else
 static void Redraw(vout_display_t *vd)
 {
     vout_display_sys_t *sys = vd->sys;
@@ -470,6 +565,7 @@ static void Redraw(vout_display_t *vd)
         sys->view->UnlockLooper();
     }
 }
+#endif
 
 static void PostSize(vout_display_t *vd, unsigned width, unsigned height)
 {
@@ -499,6 +595,7 @@ static void FitOnScreen(unsigned *width, unsigned *height)
     *height = h > 32 ? h : 32;
 }
 
+#ifndef HAIKU_VOUT_GL
 /*****************************************************************************
  * Pictures
  *****************************************************************************/
@@ -590,6 +687,89 @@ static void Display(vout_display_t *vd, picture_t *picture,
     VLC_UNUSED(subpicture);
 }
 
+#else
+/*****************************************************************************
+ * OpenGL: BGLView behind VLC's vlc_gl_t
+ *****************************************************************************/
+static int GLMakeCurrent(vlc_gl_t *gl)
+{
+    ((BGLView *)gl->sys)->LockGL();
+    return VLC_SUCCESS;
+}
+
+static void GLReleaseCurrent(vlc_gl_t *gl)
+{
+    ((BGLView *)gl->sys)->UnlockGL();
+}
+
+static void GLSwap(vlc_gl_t *gl)
+{
+    ((BGLView *)gl->sys)->SwapBuffers();
+}
+
+/* The OpenGL library, for what BGLView::GetGLProcAddress() doesn't give:
+ * VitruvianOS's only knows extensions, not glBindTexture and the like */
+static void *OpenGLLibrary(void)
+{
+    void *lib = dlopen("libOpenGL.so.0", RTLD_LAZY | RTLD_LOCAL);
+    if (lib == NULL)
+        lib = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+    if (lib == NULL)
+        lib = dlopen("libGL.so", RTLD_LAZY | RTLD_LOCAL);
+    return lib;
+}
+
+static void *GLGetProcAddress(vlc_gl_t *gl, const char *name)
+{
+    void *function = ((BGLView *)gl->sys)->GetGLProcAddress(name);
+    if (function == NULL)
+        function = dlsym(RTLD_DEFAULT, name);
+    if (function == NULL) {
+        static void *lib = OpenGLLibrary();
+        if (lib != NULL)
+            function = dlsym(lib, name);
+    }
+    return function;
+}
+
+static picture_pool_t *Pool(vout_display_t *vd, unsigned count)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    if (sys->pool == NULL && vlc_gl_MakeCurrent(sys->gl) == VLC_SUCCESS) {
+        sys->pool = vout_display_opengl_GetPool(sys->vgl, count);
+        vlc_gl_ReleaseCurrent(sys->gl);
+    }
+    return sys->pool;
+}
+
+static void Prepare(vout_display_t *vd, picture_t *picture,
+                    subpicture_t *subpicture)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    if (vlc_gl_MakeCurrent(sys->gl) == VLC_SUCCESS) {
+        vout_display_opengl_Prepare(sys->vgl, picture, subpicture);
+        vlc_gl_ReleaseCurrent(sys->gl);
+    }
+}
+
+static void Display(vout_display_t *vd, picture_t *picture,
+                    subpicture_t *subpicture)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    if (vlc_gl_MakeCurrent(sys->gl) == VLC_SUCCESS) {
+        vout_display_opengl_Display(sys->vgl, &vd->source);
+        vlc_gl_ReleaseCurrent(sys->gl);
+    }
+    picture_Release(picture);
+    if (subpicture != NULL)
+        subpicture_Delete(subpicture);
+}
+
+#endif
+
 /*****************************************************************************
  * Control
  *****************************************************************************/
@@ -667,8 +847,13 @@ static int Control(vout_display_t *vd, int query, va_list args)
             Redraw(vd);
             return VLC_SUCCESS;
 
-        case VOUT_DISPLAY_RESET_PICTURES:
+#ifdef HAIKU_VOUT_GL
         case VOUT_DISPLAY_CHANGE_VIEWPOINT:
+            return vout_display_opengl_SetViewpoint(sys->vgl,
+                &va_arg(args, const vout_display_cfg_t *)->viewpoint);
+#endif
+
+        case VOUT_DISPLAY_RESET_PICTURES:
         default:
             return VLC_EGENERIC;
     }
@@ -691,6 +876,7 @@ static int Open(vlc_object_t *object)
     }
     vd->sys = sys;
     vlc_mutex_init(&sys->lock);
+#ifndef HAIKU_VOUT_GL
     sys->filter = var_InheritBool(vd, "haiku-vout-filter");
 
     /* Pictures are BBitmaps of the source size, in the B_RGB32 layout */
@@ -701,6 +887,7 @@ static int Open(vlc_object_t *object)
     fmt.i_gmask = 0x0000ff00;
     fmt.i_bmask = 0x000000ff;
     vd->fmt = fmt;
+#endif
 
     unsigned width, height;
     vout_display_GetDefaultDisplaySize(&width, &height, &vd->source, vd->cfg);
@@ -730,6 +917,35 @@ static int Open(vlc_object_t *object)
     vd->manage  = NULL;
 
     sys->window->Show();
+#ifdef HAIKU_VOUT_GL
+    /* The renderer comes with the view attached to a shown window */
+    sys->glview = sys->window->GLView();
+    sys->gl = (vlc_gl_t *)vlc_object_create(vd, sizeof(*sys->gl));
+    if (sys->gl == NULL) {
+        Close(object);
+        return VLC_ENOMEM;
+    }
+    sys->gl->sys = sys->glview;
+    sys->gl->makeCurrent = GLMakeCurrent;
+    sys->gl->releaseCurrent = GLReleaseCurrent;
+    sys->gl->swap = GLSwap;
+    sys->gl->getProcAddress = GLGetProcAddress;
+
+    const vlc_fourcc_t *spu_chromas;
+    if (vlc_gl_MakeCurrent(sys->gl) == VLC_SUCCESS) {
+        sys->vgl = vout_display_opengl_New(&vd->fmt, &spu_chromas, sys->gl,
+                                           &vd->cfg->viewpoint);
+        vlc_gl_ReleaseCurrent(sys->gl);
+    }
+    if (sys->vgl == NULL) {
+        msg_Err(vd, "cannot use OpenGL in the BGLView");
+        Close(object);
+        return VLC_EGENERIC;
+    }
+    vd->info.subpicture_chromas = spu_chromas;
+    vd->prepare = Prepare;
+    Redraw(vd);
+#endif
     vout_display_SendEventDisplaySize(vd, width, height);
     if (vd->cfg->is_fullscreen)
         vout_display_SendEventFullscreen(vd, true, false);
@@ -741,6 +957,13 @@ static void Close(vlc_object_t *object)
     vout_display_t *vd = (vout_display_t *)object;
     vout_display_sys_t *sys = vd->sys;
 
+#ifdef HAIKU_VOUT_GL
+    if (sys->vgl != NULL && vlc_gl_MakeCurrent(sys->gl) == VLC_SUCCESS) {
+        vout_display_opengl_Delete(sys->vgl);   /* owns the picture pool */
+        sys->pool = NULL;
+        vlc_gl_ReleaseCurrent(sys->gl);
+    }
+#endif
     /* Wait until the window is gone: on VitruvianOS, Quit() from another
      * thread (and wait_for_thread()) can return before it is */
     BMessenger messenger(sys->window);
@@ -749,6 +972,10 @@ static void Close(vlc_object_t *object)
     for (int i = 0; i < 200 && messenger.IsValid(); i++)
         snooze(10000);
 
+#ifdef HAIKU_VOUT_GL
+    if (sys->gl != NULL)
+        vlc_object_release(sys->gl);
+#endif
     if (sys->current != NULL)
         picture_Release(sys->current);
     if (sys->pool != NULL)

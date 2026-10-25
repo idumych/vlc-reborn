@@ -387,6 +387,17 @@ if HAVE_HAIKU_API
 vout_LTLIBRARIES += libhaiku_vout_plugin.la
 endif
 
+libhaiku_gl_plugin_la_SOURCES = video_output/haiku.cpp $(OPENGL_COMMONSOURCES)
+libhaiku_gl_plugin_la_CPPFLAGS = $(AM_CPPFLAGS) -DHAIKU_VOUT_GL
+libhaiku_gl_plugin_la_CFLAGS = $(AM_CFLAGS) $(GL_CFLAGS) $(OPENGL_COMMONCLFAGS)
+libhaiku_gl_plugin_la_CXXFLAGS = $(AM_CXXFLAGS) $(HAIKU_API_CFLAGS) $(GL_CFLAGS) \
+	$(OPENGL_COMMONCLFAGS)
+libhaiku_gl_plugin_la_LIBADD = $(HAIKU_API_LIBS) $(HAIKU_GL_LIBS) $(LIBDL) $(LIBM) \
+	$(OPENGL_COMMONLIBS)
+if HAVE_HAIKU_GL
+vout_LTLIBRARIES += libhaiku_gl_plugin.la
+endif
+
 ### OS/2 ###
 if HAVE_OS2
 vout_LTLIBRARIES += libdrawable_plugin.la
