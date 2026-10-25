@@ -45,14 +45,8 @@ rm -f "$PKG$PREFIX/bin/cvlc" "$PKG$PREFIX/bin/rvlc" "$PKG$PREFIX/bin/nvlc" \
 
 # 2. The application, with resources. xres appends them after the ELF data,
 #    so it runs after install-strip.
-RDEF="$BUILD/vlc.rdef"
 RSRC="$BUILD/vlc.rsrc"
-MAJOR=$(echo "$VERSION" | cut -d. -f1); MIDDLE=$(echo "$VERSION" | cut -d. -f2)
-MINOR=$(echo "$VERSION" | cut -d. -f3)
-sed -e "s|@APP_SIGNATURE@|$APP_SIG|" -e "s|@MAJOR@|$MAJOR|" -e "s|@MIDDLE@|$MIDDLE|" \
-	-e "s|@MINOR@|$MINOR|" -e "s|@LONG_INFO@|$SUMMARY|" \
-	haikuports/media-video/vlc/additional-files/vlc.rdef.in > "$RDEF"
-rc -o "$RSRC" "$RDEF"
+rc -o "$RSRC" "$ROOT/$RDEF"
 [ -s "$RSRC" ] || { echo "build-deb: rc made no resources" >&2; exit 1; }
 mkdir -p "$PKG/system/apps" "$PKG/system/data/deskbar/menu/Applications" "$PKG/usr/bin"
 install -m 0755 "$PKG$PREFIX/bin/vlc" "$PKG/system/apps/$APP_NAME"

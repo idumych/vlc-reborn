@@ -3,7 +3,7 @@
 VLC media player with its native BeOS-style interface back, and the
 **BBitmap video output** as the default, like it was in 2001:
 
-![VLC 0.2.70 on BeOS, April 2001](screenshots/vlc-0.2.70-beos-2001.png)
+![VLC 0.2.70 on BeOS, April 2001](docs/screenshots/vlc-0.2.70-beos-2001.png)
 
 *VLC 0.2.70 on BeOS, April 2001 (screenshot from
 [videolan.org](https://images.videolan.org/vlc/screenshots/20010412-00.png))*
@@ -18,7 +18,7 @@ to VLC 3.0.23, with no Qt, on three platforms:
 | VitruvianOS 0.6, a BeOS-like OS based on Linux | `.deb` | amd64, arm64 |
 | Linux (any desktop, X11 or Wayland) | AppImage, with [Hokku](https://github.com/idumych/hokku) (the Haiku API as a library) | x86_64, aarch64 |
 
-![VLC Reborn on Haiku R1/beta6](screenshots/main.png)
+![VLC Reborn on Haiku R1/beta6](docs/screenshots/main.png)
 
 ## What you get
 
@@ -44,19 +44,19 @@ to VLC 3.0.23, with no Qt, on three platforms:
 - Files and folders dropped on a VLC window replace the playlist and
   play; File ▸ Open File adds to it.
 
-![Preferences](screenshots/preferences.png)
+![Preferences](docs/screenshots/preferences.png)
 
-![Playlist window](screenshots/playlist.png)
+![Playlist window](docs/screenshots/playlist.png)
 
-![Menus](screenshots/menus.png)
+![Menus](docs/screenshots/menus.png)
 
 VitruvianOS runs the Haiku API on Linux, so VLC looks the same there:
 
-![VLC Reborn on VitruvianOS 0.6.2](screenshots/vitruvianos.png)
+![VLC Reborn on VitruvianOS 0.6.2](docs/screenshots/vitruvianos.png)
 
 On Linux, through Hokku:
 
-![VLC Reborn on Linux](screenshots/linux.png)
+![VLC Reborn on Linux](docs/screenshots/linux.png)
 
 ## Install
 
