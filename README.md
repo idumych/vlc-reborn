@@ -52,7 +52,7 @@ to VLC 3.0.23, with no Qt, on three platforms:
 
 VitruvianOS runs the Haiku API on Linux, so VLC looks the same there:
 
-![VLC Reborn on VitruvianOS 0.6.2](docs/screenshots/vitruvianos.png)
+![VLC Reborn on VitruvianOS 0.6.2](docs/screenshots/vitruvianos-desktop.png)
 
 On Linux, through Hokku:
 
