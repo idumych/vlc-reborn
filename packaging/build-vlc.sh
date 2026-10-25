@@ -32,5 +32,13 @@ cd obj/vlc-build
 	--disable-update-check --disable-static \
 	--disable-dbus --disable-gst-decode \
 	"$@"
-make -j"$JOBS"
-make install-strip DESTDIR="$DESTDIR"
+# VLC_SKIP_CACHE_GEN=1: don't run vlc-cache-gen (it skips the plugin cache
+# when build and host differ). For targets whose Haiku API libraries can't
+# run on the build machine; generate the cache when installing instead.
+if [ "${VLC_SKIP_CACHE_GEN:-}" = 1 ]; then
+	set -- build=skip-plugin-cache
+else
+	set --
+fi
+make -j"$JOBS" "$@"
+make install-strip DESTDIR="$DESTDIR" "$@"

@@ -29,10 +29,10 @@ done
 
 # 1. VLC, against the VitruvianOS Haiku API
 rm -rf "$BUILD"
-# vlc-cache-gen runs during the build and loads libvlccore, which needs the
-# SDK's libbe
-VOS_LIBDIR=$(pkg-config --variable=libdir vos)
-LD_LIBRARY_PATH="$VOS_LIBDIR:$VOS_LIBDIR/../linkdeps${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+# The SDK's libraries only link: libroot needs VitruvianOS's Nexus device to
+# load ("Can't open Nexus IPC"), so nothing linked to them runs here. The
+# plugin cache is made by postinst on VitruvianOS.
+VLC_SKIP_CACHE_GEN=1 \
 HAIKU_API_CFLAGS="$(pkg-config --cflags vos) -fPIC" \
 HAIKU_API_LIBS="$(pkg-config --libs vos)" \
 	sh packaging/build-vlc.sh "$PREFIX" "$PKG"
