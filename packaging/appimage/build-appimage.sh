@@ -147,6 +147,13 @@ NO_STRIP=1 LD_LIBRARY_PATH="$APPDIR/usr/lib" "$LDROOT/AppRun" --appdir "$APPDIR"
 	--icon-file "$GEN/$APP_CMD.png" \
 	--custom-apprun "$GEN/AppRun"
 
+# The app's resources (signature, version, icon) as Cosmoe reads them: a
+# .cosmoe_rsrc section in the executable. Added after linuxdeploy so nothing
+# strips it; Cosmoe finds it by its magic, so it needn't be loaded.
+LD_LIBRARY_PATH="$CROOT/lib" "$CROOT/bin/rc" -o "$GEN/$APP_NAME.rsrc" "$ROOT/$RDEF"
+objcopy --add-section .cosmoe_rsrc="$GEN/$APP_NAME.rsrc" \
+	--set-section-flags .cosmoe_rsrc=readonly,data "$APPDIR/usr/bin/vlc"
+
 # The plugin cache, for the paths inside the AppImage
 LD_LIBRARY_PATH="$APPDIR/usr/lib" "$APPDIR/usr/lib/vlc/vlc-cache-gen" \
 	"$APPDIR/usr/lib/vlc/plugins" || :
