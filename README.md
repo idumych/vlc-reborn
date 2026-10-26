@@ -168,7 +168,9 @@ out the packaging files).
   a video under Xvfb, with the BBitmap and the OpenGL output (NVIDIA, EGL).
   On a KDE Plasma (Wayland) laptop with two monitors: the preferences
   window's pop-up menus.
-- The modern interface was only tested on Haiku, not yet on Linux.
+- The modern interface on Linux: playback with the video in the window
+  under Xvfb; its fullscreen, playlist and interface switch were only
+  tested on Haiku.
 - Not tested: playback on aarch64, Renku OS, DVDs and other
   discs, subtitle files, network streams.
 
