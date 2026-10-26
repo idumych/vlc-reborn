@@ -53,6 +53,37 @@ to VLC 3.0.23, with no Qt, on three platforms:
 
 ![Menus](docs/screenshots/menus.png)
 
+### The modern interface
+
+VLC 3's own interface, rebuilt with Haiku views instead of Qt: the video
+plays inside the main window, above the seek bar and the controls (play,
+previous, stop, next, fullscreen, playlist, loop, random, volume), and the
+window fits itself to the video. Choose it with View ▸ Classic Interface /
+Window ▸ Modern Interface (the switch is live: a playing video moves to the
+other window and carries on where it was), in Preferences (Interface
+style, in the Haiku interface's settings), or with
+`--haiku-interface=modern`. The choice is remembered.
+
+- VLC 3's menus: **Media** (Open File, Open Folder, Open Disc, Open Network
+  Stream, Open Location from clipboard, Open Recent Media, Save Playlist to
+  File, Quit at the end of playlist), **Playback** (title, chapter,
+  program, speed, jumps, Jump to Specific Time), **Audio** (track, stereo
+  mode, volume), **Video** (track, fullscreen, always on top, zoom, aspect
+  ratio, crop, deinterlace, snapshot), **Subtitle**, **Tools** (Media and
+  Codec Information, Messages, Preferences), **View** (docked playlist,
+  minimal interface, fullscreen interface) and **Help**. Right-click the
+  video for the same menus.
+- The docked playlist with title, album and duration columns and a search
+  field; drop files on it to add them.
+- Fullscreen with a floating controller that appears when the mouse moves.
+- Both video outputs (BBitmap and OpenGL) draw in the window.
+
+![The modern interface](docs/screenshots/modern.png)
+
+![Docked playlist and View menu](docs/screenshots/modern-playlist.png)
+
+![Fullscreen with the controller](docs/screenshots/modern-fullscreen.png)
+
 VitruvianOS runs the Haiku API on Linux, so VLC looks the same there, here
 with the OpenGL output:
 
@@ -131,7 +162,7 @@ out the packaging files).
 
 | Path | What |
 |---|---|
-| [`modules/gui/haiku/`](modules/gui/haiku) | The interface: VLC 0.8's BeOS interface (Tony Castley, Stephan Aßmus, Eric Petit and others) ported to VLC 3, with its preferences window |
+| [`modules/gui/haiku/`](modules/gui/haiku) | The interface: VLC 0.8's BeOS interface (Tony Castley, Stephan Aßmus, Eric Petit and others) ported to VLC 3, with its preferences window; and the modern interface (`Modern*.cpp`), which also provides the video output's window (`VOUT_WINDOW_TYPE_HAIKU`, a BView) |
 | [`modules/video_output/haiku.cpp`](modules/video_output/haiku.cpp) | BBitmap video output (`--vout=bbitmap`; `--no-haiku-vout-filter` turns smooth scaling off), and built again as the OpenGL output in a BGLView (`--vout=haiku_gl`) |
 | [`modules/audio_output/haiku.cpp`](modules/audio_output/haiku.cpp) | Media Kit audio output, Haiku only (HaikuPorts) |
 | [`src/haiku/application.cpp`](src/haiku/application.cpp) | The `BApplication` the plugins share; when LibVLC runs inside another Haiku app, that app's `be_app` is used |
@@ -144,6 +175,11 @@ out the packaging files).
   preferences windows (changing and saving a setting), Open File panel,
   dropping files and folders from Tracker, “Open with…”, the Deskbar
   launcher, quitting, and playback with the OpenGL output (Mesa).
+  The modern interface: playback in the window with both video outputs,
+  fullscreen and its controller, the docked playlist, the menus and the
+  right-click menu, Media and Codec Information, playing to the end,
+  switching to the classic interface and back while a video plays, and
+  quitting while windowed, in fullscreen and with other windows open.
 - **VitruvianOS 0.6.2**, amd64, in VirtualBox: install with apt (signature
   and attributes restored, plugin cache made), playback with video and
   sound (PipeWire), the OpenGL output (Mesa), the Deskbar entry, and 32
@@ -153,6 +189,8 @@ out the packaging files).
   a video under Xvfb, with the BBitmap and the OpenGL output (NVIDIA, EGL).
   On a KDE Plasma (Wayland) laptop with two monitors: the preferences
   window's pop-up menus.
+- The modern interface was only tested on Haiku, not yet on VitruvianOS
+  or Linux.
 - Not tested: the arm64 .deb (VirtualBox can't run arm64 guests; it only
   passed the static checks), playback on aarch64, Renku OS, DVDs and other
   discs, subtitle files, network streams.

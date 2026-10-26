@@ -83,5 +83,43 @@
 #define CLEAR_PLAYLIST     'clpl'
 #define PLAYLIST_CHANGED   'plch'
 #define LOG_MESSAGE        'logm'
+#define SWITCH_INTERFACE   'swif'    // "style": "classic" or "modern"
+
+/* Modern interface */
+#define OPEN_FOLDER        'opfo'
+#define FOLDER_RECEIVED    'fore'
+#define OPEN_CLIPBOARD     'opcb'
+#define OPEN_RECENT        'opre'
+#define CLEAR_RECENT       'clre'
+#define SAVE_PLAYLIST      'svpl'
+#define PLAYLIST_SAVED     'plsv'
+#define QUIT_AT_END        'qaen'
+#define RATE_FASTER        'rtfa'
+#define RATE_FASTER_FINE   'rtff'
+#define RATE_NORMAL        'rtno'
+#define RATE_SLOWER_FINE   'rtsf'
+#define RATE_SLOWER        'rtsl'
+#define JUMP_FORWARD       'jpfw'
+#define JUMP_BACKWARD      'jpbw'
+#define GOTO_TIME          'goti'
+#define TIME_ENTERED       'tien'
+#define SET_VARIABLE       'svar'
+#define TAKE_SNAPSHOT      'snap'
+#define TOGGLE_LOOP        'tglo'
+#define TOGGLE_RANDOM      'tgra'
+#define TOGGLE_PLAYLIST    'tgpl'
+#define TOGGLE_MINIMAL     'tgmi'
+#define TOGGLE_REMAINING   'tgrm'
+#define OPEN_INFO          'info'
+#define OPEN_CODEC_INFO    'coin'
+#define POPUP_MENU         'popm'
+#define SHOW_CONTROLLER    'shco'
+#define HIDE_CONTROLLER    'hico'
+#define PLAYLIST_FILTER    'plfi'
+#define VIDEO_SIZE         'vsze'    // from the video window provider
+#define VIDEO_FULLSCREEN   'vful'
+#define VIDEO_STATE        'vsta'
+#define VIDEO_DETACHED     'vdet'
+#define VIDEO_HIDE_CURSOR  'vhcr'    // understood by the video output's view
 
 #endif    // HAIKU_MESSAGE_VALUES_H

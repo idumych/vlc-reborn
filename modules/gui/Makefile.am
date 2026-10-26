@@ -24,9 +24,14 @@ libhaiku_plugin_la_SOURCES = \
 	gui/haiku/haiku.cpp \
 	gui/haiku/Bitmaps.h \
 	gui/haiku/DrawingTidbits.cpp gui/haiku/DrawingTidbits.h \
+	gui/haiku/InfoWindow.cpp gui/haiku/InfoWindow.h \
 	gui/haiku/InterfaceWindow.cpp gui/haiku/InterfaceWindow.h \
+	gui/haiku/MainWindow.h \
 	gui/haiku/MediaControlView.cpp gui/haiku/MediaControlView.h \
 	gui/haiku/MessagesWindow.cpp gui/haiku/MessagesWindow.h \
+	gui/haiku/ModernControls.cpp gui/haiku/ModernControls.h \
+	gui/haiku/ModernPlaylist.cpp gui/haiku/ModernPlaylist.h \
+	gui/haiku/ModernWindow.cpp gui/haiku/ModernWindow.h \
 	gui/haiku/MsgVals.h \
 	gui/haiku/PlayListWindow.cpp gui/haiku/PlayListWindow.h \
 	gui/haiku/PreferencesWindow.cpp gui/haiku/PreferencesWindow.h \

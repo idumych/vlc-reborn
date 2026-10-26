@@ -54,6 +54,7 @@ enum vout_window_type {
     VOUT_WINDOW_TYPE_ANDROID_NATIVE /**< Android native window */,
     VOUT_WINDOW_TYPE_WAYLAND /**< Wayland surface */,
     VOUT_WINDOW_TYPE_QT /**< Qt widget */,
+    VOUT_WINDOW_TYPE_HAIKU /**< Haiku API BView */,
 };
 
 /**
@@ -161,6 +162,7 @@ struct vout_window_t {
         void     *anativewindow; /**< Android native window */
         struct wl_surface *wl;   /**< Wayland surface (client pointer) */
         void 	 *qtwindow;   /**< Qt widget */
+        void     *bview;         /**< Haiku API BView (lock its looper) */
     } handle;
 
     /** Display server (mandatory)

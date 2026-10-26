@@ -28,9 +28,13 @@
 #define HAIKU_INTERFACE_WINDOW_H
 
 #include <Menu.h>
+#include <Messenger.h>
 #include <Window.h>
 
+#include "MainWindow.h"
+
 class BFilePanel;
+class BTextControl;
 class BMenuBar;
 class BMessageRunner;
 class MediaControlView;
@@ -69,7 +73,19 @@ class VariableMenu : public BMenu
     uint32                  i_command;
 };
 
-class InterfaceWindow : public BWindow
+/* Asks for a network stream address; sends LOCATION_ENTERED with "url" */
+class LocationWindow : public BWindow
+{
+ public:
+                            LocationWindow( BRect frame, BMessenger target );
+    virtual void            MessageReceived( BMessage * message );
+
+ private:
+    BMessenger              fTarget;
+    BTextControl *          fText;
+};
+
+class InterfaceWindow : public MainWindow
 {
  public:
                             InterfaceWindow( intf_thread_t * p_intf,
@@ -86,9 +102,7 @@ class InterfaceWindow : public BWindow
             void            UpdateInterface();
             bool            IsStopped() const;
 
-            /* Stops the callbacks and child windows before the window
-             * goes away; called from the interface Close() */
-            void            Detach();
+    virtual void            Detach();
 
     MediaControlView*       p_mediaControl;
 
@@ -135,6 +149,9 @@ class InterfaceWindow : public BWindow
 };
 
 // some global support functions
+bool make_sure_frame_is_on_screen( BRect& frame );
+void set_window_pos( BWindow* window, BRect frame );
+
 status_t load_settings( BMessage* message,
                         const char* fileName,
                         const char* folder = NULL );

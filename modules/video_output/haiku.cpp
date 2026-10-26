@@ -23,6 +23,8 @@
 /*
  * Like the BeOS video output of VLC 0.x, frames are decoded into BBitmaps
  * and drawn into a plain BWindow; app_server scales them to the window.
+ * When an interface provides a BView for the video (the modern interface),
+ * the video is drawn in that view instead of a window of its own.
  */
 
 #ifdef HAVE_CONFIG_H
@@ -32,6 +34,7 @@
 #include <vlc_common.h>
 #include <vlc_plugin.h>
 #include <vlc_vout_display.h>
+#include <vlc_vout_window.h>
 #include <vlc_picture_pool.h>
 #include <vlc_haiku.h>
 
@@ -86,7 +89,7 @@ vlc_module_begin ()
 #endif
     set_callbacks(Open, Close)
     /* The window thread runs this plugin's code until it is gone, which
-     * Quit() doesn't wait for everywhere (VitruvianOS) */
+     * Quit() doesn't wait for everywhere (Haiku API on Linux) */
     cannot_unload_broken_library()
 vlc_module_end ()
 
@@ -110,8 +113,9 @@ class VideoWindow;
 struct vout_display_sys_t
 {
     picture_pool_t *pool;
-    VideoWindow    *window;
+    VideoWindow    *window;     /* NULL when embedded */
     VideoView      *view;
+    vout_window_t  *embed;      /* the interface's BView, if any */
 #ifdef HAIKU_VOUT_GL
     BGLView        *glview;
     vlc_gl_t       *gl;
@@ -339,6 +343,14 @@ public:
         int code = KeyToVLC(msg);
         if (code != KEY_UNSET)
             vout_display_SendEventKey(vd, code);
+    }
+
+    virtual void MessageReceived(BMessage *msg)
+    {
+        if (msg->what == MSG_HIDE_CURSOR)
+            HideCursor();
+        else
+            BView::MessageReceived(msg);
     }
 
     void HideCursor()
@@ -569,6 +581,12 @@ static void Redraw(vout_display_t *vd)
 
 static void PostSize(vout_display_t *vd, unsigned width, unsigned height)
 {
+    if (vd->sys->embed != NULL) {
+        /* The interface fits its window around the video */
+        vout_window_SetSize(vd->sys->embed, width, height);
+        return;
+    }
+
     BMessage msg(MSG_SET_SIZE);
     msg.AddInt32("width", width);
     msg.AddInt32("height", height);
@@ -674,7 +692,7 @@ static void Display(vout_display_t *vd, picture_t *picture,
         sys->view->DrawFrame(picture->p_sys->bitmap, source, place, filter);
         sys->view->Sync();
 #else
-        /* Cosmoe and VitruvianOS only show what Draw() paints: ask for a
+        /* Cosmoe only shows what Draw() paints: ask for a
          * redraw of the picture, which stays held until the next one */
         sys->view->Invalidate();
         VLC_UNUSED(source); VLC_UNUSED(place); VLC_UNUSED(filter);
@@ -708,7 +726,7 @@ static void GLSwap(vlc_gl_t *gl)
 }
 
 /* The OpenGL library, for what BGLView::GetGLProcAddress() doesn't give:
- * VitruvianOS's only knows extensions, not glBindTexture and the like */
+ * some only know extensions, not glBindTexture and the like */
 static void *OpenGLLibrary(void)
 {
     void *lib = dlopen("libOpenGL.so.0", RTLD_LAZY | RTLD_LOCAL);
@@ -780,11 +798,14 @@ static int Control(vout_display_t *vd, int query, va_list args)
     switch (query)
     {
         case VOUT_DISPLAY_HIDE_MOUSE:
-            sys->window->PostMessage(MSG_HIDE_CURSOR);
+            BMessenger(sys->view).SendMessage(MSG_HIDE_CURSOR);
             return VLC_SUCCESS;
 
         case VOUT_DISPLAY_CHANGE_FULLSCREEN:
         {
+            /* An interface's window does that itself */
+            if (sys->embed != NULL)
+                return VLC_SUCCESS;
             BMessage msg(MSG_SET_FULLSCREEN);
             msg.AddBool("fullscreen", va_arg(args, int) != 0);
             sys->window->PostMessage(&msg);
@@ -794,6 +815,8 @@ static int Control(vout_display_t *vd, int query, va_list args)
         case VOUT_DISPLAY_CHANGE_WINDOW_STATE:
         {
             unsigned state = va_arg(args, unsigned);
+            if (sys->embed != NULL)
+                return VLC_SUCCESS;
             BMessage msg(MSG_SET_ON_TOP);
             msg.AddBool("on-top", (state & VOUT_WINDOW_STATE_ABOVE) != 0);
             sys->window->PostMessage(&msg);
@@ -806,7 +829,7 @@ static int Control(vout_display_t *vd, int query, va_list args)
             vlc_mutex_lock(&sys->lock);
             UpdatePlace(vd, cfg);
             vlc_mutex_unlock(&sys->lock);
-            if (!cfg->is_fullscreen)
+            if (!cfg->is_fullscreen && sys->embed == NULL)
                 PostSize(vd, cfg->display.width, cfg->display.height);
             Redraw(vd);
             return VLC_SUCCESS;
@@ -860,6 +883,42 @@ static int Control(vout_display_t *vd, int query, va_list args)
 }
 
 /*****************************************************************************
+ * Embed: draws in the interface's view, if it has one for the video
+ *****************************************************************************/
+static bool Embed(vout_display_t *vd, unsigned *width, unsigned *height)
+{
+    vout_display_sys_t *sys = vd->sys;
+
+    vout_window_t *embed = vout_display_NewWindow(vd, VOUT_WINDOW_TYPE_HAIKU);
+    if (embed == NULL)
+        return false;
+
+    BView *parent = (BView *)embed->handle.bview;
+    if (parent->LockLooperWithTimeout(3000000) != B_OK) {
+        msg_Warn(vd, "the interface does not answer, using a window");
+        vout_display_DeleteWindow(vd, embed);
+        return false;
+    }
+    BRect bounds = parent->Bounds();
+    sys->view = new VideoView(bounds, vd);
+#ifdef HAIKU_VOUT_GL
+    sys->glview = new VideoGLView(sys->view->Bounds(), sys->view);
+    sys->view->AddChild(sys->glview);
+#endif
+    parent->AddChild(sys->view);
+    sys->view->MakeFocus(true);
+    parent->UnlockLooper();
+
+    sys->embed = embed;
+    if (bounds.IsValid() && bounds.Width() >= 1 && bounds.Height() >= 1) {
+        *width = bounds.IntegerWidth() + 1;
+        *height = bounds.IntegerHeight() + 1;
+    }
+    msg_Dbg(vd, "drawing in the interface window");
+    return true;
+}
+
+/*****************************************************************************
  * Open / Close
  *****************************************************************************/
 static int Open(vlc_object_t *object)
@@ -893,15 +952,17 @@ static int Open(vlc_object_t *object)
     vout_display_GetDefaultDisplaySize(&width, &height, &vd->source, vd->cfg);
     FitOnScreen(&width, &height);
 
-    BScreen screen(B_MAIN_SCREEN_ID);
-    BRect sf = screen.Frame();
-    float left = sf.left + ((sf.Width() + 1) - width) / 2;
-    float top = sf.top + ((sf.Height() + 1) - height) / 2;
-    BRect frame(left, top, left + width - 1, top + height - 1);
+    if (!Embed(vd, &width, &height)) {
+        BScreen screen(B_MAIN_SCREEN_ID);
+        BRect sf = screen.Frame();
+        float left = sf.left + ((sf.Width() + 1) - width) / 2;
+        float top = sf.top + ((sf.Height() + 1) - height) / 2;
+        BRect frame(left, top, left + width - 1, top + height - 1);
 
-    const char *title = vd->cfg->display.title;
-    sys->window = new VideoWindow(frame, title ? title : VOUT_HAIKU_TITLE, vd);
-    sys->view = sys->window->View();
+        const char *title = vd->cfg->display.title;
+        sys->window = new VideoWindow(frame, title ? title : VOUT_HAIKU_TITLE, vd);
+        sys->view = sys->window->View();
+    }
 
     vout_display_cfg_t cfg = *vd->cfg;
     cfg.display.width = width;
@@ -916,10 +977,12 @@ static int Open(vlc_object_t *object)
     vd->control = Control;
     vd->manage  = NULL;
 
-    sys->window->Show();
+    if (sys->window != NULL)
+        sys->window->Show();
 #ifdef HAIKU_VOUT_GL
     /* The renderer comes with the view attached to a shown window */
-    sys->glview = sys->window->GLView();
+    if (sys->window != NULL)
+        sys->glview = sys->window->GLView();
     sys->gl = (vlc_gl_t *)vlc_object_create(vd, sizeof(*sys->gl));
     if (sys->gl == NULL) {
         Close(object);
@@ -947,7 +1010,7 @@ static int Open(vlc_object_t *object)
     Redraw(vd);
 #endif
     vout_display_SendEventDisplaySize(vd, width, height);
-    if (vd->cfg->is_fullscreen)
+    if (vd->cfg->is_fullscreen && sys->embed == NULL)
         vout_display_SendEventFullscreen(vd, true, false);
     return VLC_SUCCESS;
 }
@@ -964,13 +1027,25 @@ static void Close(vlc_object_t *object)
         vlc_gl_ReleaseCurrent(sys->gl);
     }
 #endif
-    /* Wait until the window is gone: on VitruvianOS, Quit() from another
-     * thread (and wait_for_thread()) can return before it is */
-    BMessenger messenger(sys->window);
-    if (sys->window->Lock())
-        sys->window->Quit();
-    for (int i = 0; i < 200 && messenger.IsValid(); i++)
-        snooze(10000);
+    if (sys->embed != NULL) {
+        /* Give the interface its view back */
+        BLooper *looper = sys->view->Looper();
+        if (looper != NULL && looper->Lock()) {
+            sys->view->RemoveSelf();
+            looper->Unlock();
+        }
+        delete sys->view;
+        vout_display_DeleteWindow(vd, sys->embed);
+    } else {
+        /* Wait until the window is gone: with the Haiku API on Linux,
+         * Quit() from another thread (and wait_for_thread()) can return
+         * before it is */
+        BMessenger messenger(sys->window);
+        if (sys->window->Lock())
+            sys->window->Quit();
+        for (int i = 0; i < 200 && messenger.IsValid(); i++)
+            snooze(10000);
+    }
 
 #ifdef HAIKU_VOUT_GL
     if (sys->gl != NULL)

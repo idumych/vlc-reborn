@@ -165,10 +165,7 @@ static const char * const kPlaylistVariables[] = {
 /*****************************************************************************
  * LocationWindow: asks for a network stream address
  *****************************************************************************/
-class LocationWindow : public BWindow
-{
- public:
-    LocationWindow( BRect frame, BMessenger target )
+LocationWindow::LocationWindow( BRect frame, BMessenger target )
         : BWindow( frame, _("Open Location"), B_TITLED_WINDOW_LOOK,
                    B_MODAL_APP_WINDOW_FEEL,
                    B_NOT_ZOOMABLE | B_NOT_V_RESIZABLE | B_ASYNCHRONOUS_CONTROLS
@@ -205,10 +202,10 @@ class LocationWindow : public BWindow
         background->AddChild( cancel );
 
         fText->MakeFocus( true );
-    }
+}
 
-    virtual void MessageReceived( BMessage * message )
-    {
+void LocationWindow::MessageReceived( BMessage * message )
+{
         if ( message->what == LOCATION_ENTERED )
         {
             BMessage msg( LOCATION_ENTERED );
@@ -218,12 +215,7 @@ class LocationWindow : public BWindow
             return;
         }
         BWindow::MessageReceived( message );
-    }
-
- private:
-    BMessenger      fTarget;
-    BTextControl *  fText;
-};
+}
 
 /*****************************************************************************
  * InterfaceWindow
@@ -231,8 +223,8 @@ class LocationWindow : public BWindow
 
 InterfaceWindow::InterfaceWindow( intf_thread_t * _p_intf, BRect frame,
                                   const char * name )
-    : BWindow( frame, name, B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
-               B_NOT_ZOOMABLE | B_WILL_ACCEPT_FIRST_CLICK | B_ASYNCHRONOUS_CONTROLS ),
+    : MainWindow( frame, name, B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL,
+                  B_NOT_ZOOMABLE | B_WILL_ACCEPT_FIRST_CLICK | B_ASYNCHRONOUS_CONTROLS ),
 
       /* Initializations */
       p_intf( _p_intf ),
@@ -367,6 +359,10 @@ InterfaceWindow::InterfaceWindow( intf_thread_t * _p_intf, BRect frame,
                                       new BMessage( TOGGLE_FULL_SCREEN ), 'F' ) );
     showMenu->AddItem( fOnTopMI = new BMenuItem( _("Always on Top"),
                                       new BMessage( TOGGLE_ON_TOP ), 'T' ) );
+    showMenu->AddSeparatorItem();
+    BMessage * modern = new BMessage( SWITCH_INTERFACE );
+    modern->AddString( "style", "modern" );
+    showMenu->AddItem( new BMenuItem( _("Modern Interface"), modern ) );
     fMenuBar->AddItem( showMenu );
 
     // add the media control view after the menubar is complete
@@ -766,6 +762,17 @@ void InterfaceWindow::MessageReceived( BMessage * p_message )
             UpdateInterface();
             break;
 
+        case SWITCH_INTERFACE:
+        {
+            const char * psz_style;
+            if( p_message->FindString( "style", &psz_style ) == B_OK )
+            {
+                _StoreSettings();
+                SwitchInterface( p_intf, psz_style );
+            }
+            break;
+        }
+
         default:
             BWindow::MessageReceived( p_message );
             break;
@@ -780,6 +787,8 @@ void InterfaceWindow::MessageReceived( BMessage * p_message )
  *****************************************************************************/
 bool InterfaceWindow::QuitRequested()
 {
+    if( fRetiring )
+        return true;
     _StoreSettings();
 
     /* The window is closed by the interface module when LibVLC stops */
