@@ -1,11 +1,11 @@
 #!/bin/sh
 # build-vlc.sh — configures, builds and installs this VLC tree for a Linux
-# system with the Haiku API (VitruvianOS, or Cosmoe/Hokku for the AppImage).
+# system with the Haiku API (Cosmoe/Hokku, for the AppImage).
 #
 #   HAIKU_API_CFLAGS=... HAIKU_API_LIBS=... \
 #     sh packaging/build-vlc.sh PREFIX DESTDIR [extra configure options]
 #
-# Used by .github/workflows/deb.yml and appimage.yml. The Haiku build uses the
+# Used by .github/workflows/appimage.yml. The Haiku build uses the
 # HaikuPorts recipe in haikuports/media-video/vlc instead.
 set -eu
 cd "$(dirname "$0")/.."

@@ -10,12 +10,11 @@ VLC media player with its native BeOS-style interface back, and the
 
 VLC used to have a native BeOS interface. It was removed in 2010 (VLC 1.1)
 and today's Haiku port uses Qt. VLC Reborn brings the native interface back
-to VLC 3.0.23, with no Qt, on three platforms:
+to VLC 3.0.23, with no Qt, on two platforms:
 
 | Platform | Package | Architectures |
 |---|---|---|
 | Haiku R1/beta6 | `.hpkg` | x86_64 |
-| VitruvianOS 0.6, a BeOS-like OS based on Linux | `.deb` | amd64, arm64 |
 | Linux (any desktop, X11 or Wayland) | AppImage, with [Hokku](https://github.com/idumych/hokku) (the Haiku API as a library) | x86_64, aarch64 |
 
 ![VLC Reborn on Haiku R1/beta6](docs/screenshots/main.png)
@@ -84,12 +83,7 @@ style, in the Haiku interface's settings), or with
 
 ![Fullscreen with the controller](docs/screenshots/modern-fullscreen.png)
 
-VitruvianOS runs the Haiku API on Linux, so VLC looks the same there, here
-with the OpenGL output:
-
-![VLC Reborn on VitruvianOS 0.6.2, OpenGL output](docs/screenshots/vitruvianos-opengl.png)
-
-On Linux, through Hokku, also with the OpenGL output:
+On Linux, through Hokku, VLC looks the same, here with the OpenGL output:
 
 ![VLC Reborn on Linux, OpenGL output](docs/screenshots/linux-opengl.png)
 
@@ -110,14 +104,6 @@ Tracker's “Open with…” menu for audio and video files, register it once:
 
     mimeset -apps -f "/boot/system/apps/VLC media player"
 
-**VitruvianOS 0.6**:
-
-    sudo apt install ./vlc_3.0.23-5_amd64.deb      # or _arm64.deb
-
-apt installs the libraries from Debian. VLC goes to `/opt/vlc`, with
-`/system/apps/VLC`, a Deskbar entry and the `vlc` command. It replaces
-Debian's `vlc-bin` if that is installed.
-
 **Linux** (glibc 2.39 or newer: Ubuntu 24.04, Debian 13, Fedora 40 and
 later):
 
@@ -135,15 +121,12 @@ Start it from the menu, by dropping files on its window, or with
   Copy [`haikuports/media-video/vlc`](haikuports/media-video/vlc) into your
   HaikuPorts tree, replacing the existing `vlc` directory, then
   `haikuporter --get-dependencies vlc`.
-- **VitruvianOS:** [`packaging/build-deb.sh`](packaging/build-deb.sh), in
-  Debian trixie with the VitruvianOS SDK; see
-  [`.github/workflows/deb.yml`](.github/workflows/deb.yml).
 - **Linux:** [`packaging/appimage/build-appimage.sh`](packaging/appimage/build-appimage.sh),
   on Ubuntu 24.04; see [`.github/workflows/appimage.yml`](.github/workflows/appimage.yml).
 - Anywhere else with the Haiku API: `./configure --enable-haiku-api
   HAIKU_API_CFLAGS=… HAIKU_API_LIBS=…` ([`packaging/build-vlc.sh`](packaging/build-vlc.sh)).
 
-The .debs and AppImages are built by GitHub Actions, natively on each
+The AppImages are built by GitHub Actions, natively on each
 architecture.
 
 This repository is the VLC 3.0.23 source with HaikuPorts' Haiku patch and
@@ -180,19 +163,13 @@ out the packaging files).
   right-click menu, Media and Codec Information, playing to the end,
   switching to the classic interface and back while a video plays, and
   quitting while windowed, in fullscreen and with other windows open.
-- **VitruvianOS 0.6.2**, amd64, in VirtualBox: install with apt (signature
-  and attributes restored, plugin cache made), playback with video and
-  sound (PipeWire), the OpenGL output (Mesa), the Deskbar entry, and 32
-  starts and quits in a row.
 - **Linux**: on Ubuntu 24.04 in CI, both AppImages start and draw their
   window under X11 (Xvfb) and Wayland (sway); the x86_64 AppImage played
   a video under Xvfb, with the BBitmap and the OpenGL output (NVIDIA, EGL).
   On a KDE Plasma (Wayland) laptop with two monitors: the preferences
   window's pop-up menus.
-- The modern interface was only tested on Haiku, not yet on VitruvianOS
-  or Linux.
-- Not tested: the arm64 .deb (VirtualBox can't run arm64 guests; it only
-  passed the static checks), playback on aarch64, Renku OS, DVDs and other
+- The modern interface was only tested on Haiku, not yet on Linux.
+- Not tested: playback on aarch64, Renku OS, DVDs and other
   discs, subtitle files, network streams.
 
 ## Known issues

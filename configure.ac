@@ -409,7 +409,7 @@ AM_CONDITIONAL(HAVE_HAIKU,     test "${SYS}" = "haiku")
 
 dnl
 dnl  Haiku API: the native interface and video output, on Haiku and on
-dnl  systems that provide the Haiku API (VitruvianOS, Cosmoe)
+dnl  systems that provide the Haiku API (Cosmoe/Hokku)
 dnl
 AC_ARG_ENABLE([haiku-api],
   AS_HELP_STRING([--enable-haiku-api],
@@ -423,7 +423,7 @@ AS_IF([test "${enable_haiku_api}" = "yes"], [
     AS_IF([test "${SYS}" = "haiku"], [
       HAIKU_API_LIBS="-lbe"
     ], [
-      AC_MSG_ERROR([Set HAIKU_API_CFLAGS and HAIKU_API_LIBS to use the Haiku API (VitruvianOS SDK or Cosmoe).])
+      AC_MSG_ERROR([Set HAIKU_API_CFLAGS and HAIKU_API_LIBS to use the Haiku API (Cosmoe/Hokku).])
     ])
   ])
   AC_DEFINE([VLC_HAIKU_API], 1, [Define to 1 to build the Haiku API interface and video output.])
@@ -3203,7 +3203,7 @@ PKG_CHECK_MODULES([GL], [gl], [
 AM_CONDITIONAL([HAVE_GL], [test "${have_gl}" = "yes"])
 
 dnl OpenGL output in a BGLView (Haiku API): libGL on Haiku; elsewhere the
-dnl library with BGLView must be named (VitruvianOS: -lopengl)
+dnl library with BGLView must be named (for example -lopengl)
 AC_ARG_VAR([HAIKU_GL_LIBS], [linker flags for BGLView (default: -lGL on Haiku)])
 AS_IF([test "${SYS}" = "haiku" && test -z "${HAIKU_GL_LIBS}"], [HAIKU_GL_LIBS="-lGL"])
 AM_CONDITIONAL([HAVE_HAIKU_GL], [test "${enable_haiku_api}" = "yes" && test "${have_gl}" = "yes" && test -n "${HAIKU_GL_LIBS}"])

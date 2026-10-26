@@ -211,8 +211,8 @@ void MessagesWindow::ReallyQuit()
     if( fSubscribed )
         vlc_LogSet( p_intf->obj.libvlc, NULL, NULL );
 
-    /* Wait until the window is gone: on VitruvianOS, Quit() from another
-     * thread (and wait_for_thread()) can return before it is */
+    /* Wait until the window is gone: with the Haiku API on Linux, Quit()
+     * from another thread (and wait_for_thread()) can return before it is */
     BMessenger messenger( this );
     Lock();
     Hide();

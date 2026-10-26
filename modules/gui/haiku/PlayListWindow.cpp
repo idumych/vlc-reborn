@@ -212,8 +212,8 @@ PlayListWindow::MessageReceived( BMessage * p_message )
 void
 PlayListWindow::ReallyQuit()
 {
-    /* Wait until the window is gone: on VitruvianOS, Quit() from another
-     * thread (and wait_for_thread()) can return before it is */
+    /* Wait until the window is gone: with the Haiku API on Linux, Quit()
+     * from another thread (and wait_for_thread()) can return before it is */
     BMessenger messenger( this );
     Lock();
     Hide();

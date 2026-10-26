@@ -24,7 +24,7 @@
 #ifndef VLC_VOUT_DISPLAY_H
 #define VLC_VOUT_DISPLAY_H 1
 
-/* Haiku and the Haiku API (VitruvianOS, Cosmoe) use the display's own
+/* Haiku and the Haiku API (Cosmoe) use the display's own
  * fullscreen and window-state controls; on Haiku this is always on, so
  * that plugins built outside VLC see the same structures */
 #if defined(__HAIKU__) && !defined(VLC_HAIKU_API)
